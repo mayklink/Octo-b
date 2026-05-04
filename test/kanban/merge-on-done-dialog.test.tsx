@@ -1,0 +1,234 @@
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { beforeEach, describe, expect, test, vi } from 'vitest'
+import type { KanbanTicket, Project, Worktree } from '../../src/main/db/types'
+import { MergeOnDoneDialog } from '../../src/renderer/src/components/kanban/MergeOnDoneDialog'
+import { useKanbanStore } from '../../src/renderer/src/stores/useKanbanStore'
+
+const toastError = vi.fn()
+const toastSuccess = vi.fn()
+const toastWarning = vi.fn()
+
+vi.mock('sonner', () => ({
+  toast: {
+    error: (...args: unknown[]) => toastError(...args),
+    success: (...args: unknown[]) => toastSuccess(...args),
+    warning: (...args: unknown[]) => toastWarning(...args)
+  }
+}))
+
+const ticketMove = vi.fn()
+const mergeAbort = vi.fn()
+const merge = vi.fn()
+
+function makeTicket(overrides: Partial<KanbanTicket> = {}): KanbanTicket {
+  return {
+    id: 'ticket-1',
+    project_id: 'project-1',
+    title: 'Fix merge issue',
+    description: null,
+    attachments: [],
+    column: 'review',
+    sort_order: 10,
+    current_session_id: null,
+    worktree_id: 'feature-wt',
+    mode: 'build',
+    plan_ready: false,
+    created_at: '2026-04-26T00:00:00.000Z',
+    updated_at: '2026-04-26T00:00:00.000Z',
+    archived_at: null,
+    external_provider: null,
+    external_id: null,
+    external_url: null,
+    github_pr_number: null,
+    github_pr_url: null,
+    mark: null,
+    total_tokens: 0,
+    pending_launch_config: null,
+    note: null,
+    ...overrides
+  }
+}
+
+function makeWorktree(overrides: Partial<Worktree> = {}): Worktree {
+  return {
+    id: 'feature-wt',
+    project_id: 'project-1',
+    name: 'feature',
+    branch_name: 'feature',
+    path: '/repo/feature',
+    status: 'active',
+    is_default: false,
+    branch_renamed: 1,
+    last_message_at: null,
+    session_titles: '[]',
+    last_model_provider_id: null,
+    last_model_id: null,
+    last_model_variant: null,
+    attachments: '[]',
+    pinned: 0,
+    context: null,
+    github_pr_number: null,
+    github_pr_url: null,
+    base_branch: 'main',
+    created_at: '2026-04-26T00:00:00.000Z',
+    last_accessed_at: '2026-04-26T00:00:00.000Z',
+    ...overrides
+  }
+}
+
+const baseWorktree = makeWorktree({
+  id: 'base-wt',
+  name: 'main',
+  branch_name: 'main',
+  path: '/repo/main',
+  is_default: true,
+  base_branch: null
+})
+
+const project: Project = {
+  id: 'project-1',
+  name: 'Project',
+  path: '/repo/main',
+  description: null,
+  tags: null,
+  language: null,
+  custom_icon: null,
+  detected_icon: null,
+  setup_script: null,
+  run_script: null,
+  archive_script: null,
+  auto_assign_port: false,
+  sort_order: 0,
+  created_at: '2026-04-26T00:00:00.000Z',
+  last_accessed_at: '2026-04-26T00:00:00.000Z'
+}
+
+describe('MergeOnDoneDialog', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+
+    Object.defineProperty(window, 'kanban', {
+      writable: true,
+      configurable: true,
+      value: {
+        ticket: {
+          move: ticketMove.mockResolvedValue(undefined)
+        }
+      }
+    })
+
+    Object.defineProperty(window, 'db', {
+      writable: true,
+      configurable: true,
+      value: {
+        worktree: {
+          get: vi.fn().mockResolvedValue(makeWorktree()),
+          getActiveByProject: vi.fn().mockResolvedValue([makeWorktree(), baseWorktree])
+        },
+        project: {
+          get: vi.fn().mockResolvedValue(project)
+        }
+      }
+    })
+
+    Object.defineProperty(window, 'gitOps', {
+      writable: true,
+      configurable: true,
+      value: {
+        hasUncommittedChanges: vi.fn().mockResolvedValue(false),
+        branchDiffShortStat: vi.fn().mockResolvedValue({
+          success: true,
+          filesChanged: 2,
+          insertions: 4,
+          deletions: 1,
+          commitsAhead: 1
+        }),
+        getDiffStat: vi.fn(),
+        getRemoteUrl: vi.fn().mockResolvedValue({ success: true, url: null, remote: null }),
+        pull: vi.fn().mockResolvedValue({ success: true }),
+        listBranchesWithStatus: vi.fn().mockResolvedValue({
+          success: true,
+          branches: [
+            { name: 'main', isRemote: false, isCheckedOut: false },
+            { name: 'origin/developer', isRemote: true, isCheckedOut: false },
+            { name: 'feature', isRemote: false, isCheckedOut: false }
+          ]
+        }),
+        checkoutBranch: vi.fn().mockResolvedValue({ success: true }),
+        merge,
+        mergeAbort
+      }
+    })
+
+    useKanbanStore.setState({
+      tickets: new Map([['project-1', [makeTicket()]]]),
+      pendingDoneMove: {
+        ticketId: 'ticket-1',
+        projectId: 'project-1',
+        sortOrder: 100
+      }
+    })
+  })
+
+  test('keeps ticket in review when merge returns conflicts', async () => {
+    merge.mockResolvedValue({
+      success: false,
+      error: 'Merge conflicts in 1 file(s). Resolve conflicts before continuing.',
+      conflicts: ['src/file.ts']
+    })
+    mergeAbort.mockResolvedValue({ success: true })
+
+    render(<MergeOnDoneDialog />)
+
+    fireEvent.click(await screen.findByRole('button', { name: /^merge$/i }))
+
+    await waitFor(() => {
+      expect(mergeAbort).toHaveBeenCalledWith('/repo/main')
+    })
+
+    expect(ticketMove).not.toHaveBeenCalled()
+    expect(useKanbanStore.getState().tickets.get('project-1')?.[0]?.column).toBe('review')
+    expect(useKanbanStore.getState().pendingDoneMove).toBeNull()
+    expect(toastError).toHaveBeenCalledWith('Merge conflicts in 1 file — merge manually')
+  })
+
+  test('keeps ticket in review when merge fails without conflicts', async () => {
+    merge.mockResolvedValue({
+      success: false,
+      error: 'merge failed'
+    })
+
+    render(<MergeOnDoneDialog />)
+
+    fireEvent.click(await screen.findByRole('button', { name: /^merge$/i }))
+
+    await waitFor(() => {
+      expect(toastError).toHaveBeenCalledWith('Merge failed: merge failed')
+    })
+
+    expect(mergeAbort).not.toHaveBeenCalled()
+    expect(ticketMove).not.toHaveBeenCalled()
+    expect(useKanbanStore.getState().tickets.get('project-1')?.[0]?.column).toBe('review')
+    expect(useKanbanStore.getState().pendingDoneMove).toBeNull()
+  })
+
+  test('moves ticket to done only after a successful merge reaches the archive step', async () => {
+    merge.mockResolvedValue({ success: true })
+
+    render(<MergeOnDoneDialog />)
+
+    fireEvent.click(await screen.findByRole('button', { name: /^merge$/i }))
+
+    const keepButton = await screen.findByRole('button', { name: 'Keep' })
+    expect(ticketMove).not.toHaveBeenCalled()
+
+    fireEvent.click(keepButton)
+
+    await waitFor(() => {
+      expect(ticketMove).toHaveBeenCalledWith('ticket-1', 'done', 100)
+    })
+    expect(useKanbanStore.getState().tickets.get('project-1')?.[0]?.column).toBe('done')
+    expect(useKanbanStore.getState().pendingDoneMove).toBeNull()
+    expect(toastSuccess).toHaveBeenCalledWith('Branch merged successfully')
+  })
+})
