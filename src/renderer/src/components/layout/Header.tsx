@@ -64,7 +64,7 @@ import { useFileViewerStore } from '@/stores/useFileViewerStore'
 import { QuickActions } from './QuickActions'
 import { useLifecycleActions } from '@/hooks/useLifecycleActions'
 import { usePinAndActivateSession } from '@/hooks/usePinAndActivateSession'
-import { OctobMark } from '@/components/brand/OctobMark'
+import { OctobMark } from '@/components/brand/OctoBMark'
 
 type ConflictFixFlow =
   | {
