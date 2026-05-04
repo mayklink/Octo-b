@@ -25,7 +25,6 @@ import {
   cleanupScripts,
   registerTerminalHandlers,
   cleanupTerminals,
-  registerUpdaterHandlers,
   registerConnectionHandlers,
   registerUsageHandlers,
   registerAccountHandlers,
@@ -39,7 +38,6 @@ import { createLogger, getLogDir } from './services/logger'
 import { detectAgentSdks } from './services/system-info'
 import { createResponseLog, appendResponseLog } from './services/response-logger'
 import { notificationService } from './services/notification-service'
-import { updaterService } from './services/updater'
 import { ClaudeCodeImplementer } from './services/claude-code-implementer'
 import { CodexImplementer } from './services/codex-implementer'
 import { MistralVibeImplementer } from './services/mistral-vibe-implementer'
@@ -660,10 +658,6 @@ app.whenReady().then(async () => {
     // Set up notification service with main window reference
     notificationService.setMainWindow(mainWindow)
 
-    // Register updater IPC handlers and initialize auto-updater
-    registerUpdaterHandlers()
-    updaterService.init(mainWindow)
-
     // Wire up performance diagnostics collectors and auto-start if enabled
     perfDiagnostics.setCollectors({
       getPtyCount: () => ptyService.getCount(),
@@ -768,8 +762,6 @@ app.on('will-quit', async () => {
   destroyPetWindow()
   // Cleanup performance diagnostics
   perfDiagnostics.cleanup()
-  // Cleanup updater timers
-  updaterService.cleanup()
   // Cleanup terminal PTYs
   cleanupTerminals()
   // Cleanup running scripts

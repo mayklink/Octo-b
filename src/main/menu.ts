@@ -1,7 +1,6 @@
 import { BrowserWindow, Menu, app, clipboard, shell } from 'electron'
 import { createLogger, getLogDir } from './services/logger'
 import { ghosttyService } from './services/ghostty-service'
-import { updaterService } from './services/updater'
 
 const log = createLogger({ component: 'Menu' })
 
@@ -290,14 +289,6 @@ export function buildMenu(mainWindow: BrowserWindow, isDev: boolean): Menu {
     {
       label: 'Help',
       submenu: [
-        {
-          id: 'check-for-updates',
-          label: 'Check for Updates...',
-          click: () => {
-            updaterService.checkForUpdates({ manual: true })
-          }
-        },
-        { type: 'separator' },
         {
           label: 'Open Log Directory',
           click: () => {

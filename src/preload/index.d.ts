@@ -1449,39 +1449,6 @@ declare global {
         error?: string
       }>
     }
-    updaterOps: {
-      checkForUpdate: (options?: { manual?: boolean }) => Promise<void>
-      downloadUpdate: () => Promise<void>
-      installUpdate: () => Promise<void>
-      setChannel: (channel: string) => Promise<void>
-      getVersion: () => Promise<string>
-      onChecking: (callback: () => void) => () => void
-      onUpdateAvailable: (
-        callback: (data: {
-          version: string
-          releaseNotes?: string
-          releaseDate?: string
-          isManualCheck?: boolean
-        }) => void
-      ) => () => void
-      onUpdateNotAvailable: (
-        callback: (data: { version: string; isManualCheck?: boolean }) => void
-      ) => () => void
-      onProgress: (
-        callback: (data: {
-          percent: number
-          bytesPerSecond: number
-          transferred: number
-          total: number
-        }) => void
-      ) => () => void
-      onUpdateDownloaded: (
-        callback: (data: { version: string; releaseNotes?: string }) => void
-      ) => () => void
-      onError: (
-        callback: (data: { message: string; isManualCheck?: boolean }) => void
-      ) => () => void
-    }
     connectionOps: {
       create: (
         worktreeIds: string[]

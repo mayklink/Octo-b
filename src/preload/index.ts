@@ -1859,115 +1859,6 @@ const terminalOps = {
   ghosttyShutdown: (): Promise<void> => ipcRenderer.invoke('terminal:ghostty:shutdown')
 }
 
-const updaterOps = {
-  checkForUpdate: (options?: { manual?: boolean }): Promise<void> =>
-    ipcRenderer.invoke('updater:check', options),
-  downloadUpdate: (): Promise<void> => ipcRenderer.invoke('updater:download'),
-  installUpdate: (): Promise<void> => ipcRenderer.invoke('updater:install'),
-  setChannel: (channel: string): Promise<void> => ipcRenderer.invoke('updater:setChannel', channel),
-  getVersion: (): Promise<string> => ipcRenderer.invoke('updater:getVersion'),
-
-  onChecking: (callback: () => void): (() => void) => {
-    const handler = (): void => {
-      callback()
-    }
-    ipcRenderer.on('updater:checking', handler)
-    return () => {
-      ipcRenderer.removeListener('updater:checking', handler)
-    }
-  },
-
-  onUpdateAvailable: (
-    callback: (data: {
-      version: string
-      releaseNotes?: string
-      releaseDate?: string
-      isManualCheck?: boolean
-    }) => void
-  ): (() => void) => {
-    const handler = (
-      _e: Electron.IpcRendererEvent,
-      data: {
-        version: string
-        releaseNotes?: string
-        releaseDate?: string
-        isManualCheck?: boolean
-      }
-    ): void => {
-      callback(data)
-    }
-    ipcRenderer.on('updater:available', handler)
-    return () => {
-      ipcRenderer.removeListener('updater:available', handler)
-    }
-  },
-
-  onUpdateNotAvailable: (
-    callback: (data: { version: string; isManualCheck?: boolean }) => void
-  ): (() => void) => {
-    const handler = (
-      _e: Electron.IpcRendererEvent,
-      data: { version: string; isManualCheck?: boolean }
-    ): void => {
-      callback(data)
-    }
-    ipcRenderer.on('updater:not-available', handler)
-    return () => {
-      ipcRenderer.removeListener('updater:not-available', handler)
-    }
-  },
-
-  onProgress: (
-    callback: (data: {
-      percent: number
-      bytesPerSecond: number
-      transferred: number
-      total: number
-    }) => void
-  ): (() => void) => {
-    const handler = (
-      _e: Electron.IpcRendererEvent,
-      data: { percent: number; bytesPerSecond: number; transferred: number; total: number }
-    ): void => {
-      callback(data)
-    }
-    ipcRenderer.on('updater:progress', handler)
-    return () => {
-      ipcRenderer.removeListener('updater:progress', handler)
-    }
-  },
-
-  onUpdateDownloaded: (
-    callback: (data: { version: string; releaseNotes?: string }) => void
-  ): (() => void) => {
-    const handler = (
-      _e: Electron.IpcRendererEvent,
-      data: { version: string; releaseNotes?: string }
-    ): void => {
-      callback(data)
-    }
-    ipcRenderer.on('updater:downloaded', handler)
-    return () => {
-      ipcRenderer.removeListener('updater:downloaded', handler)
-    }
-  },
-
-  onError: (
-    callback: (data: { message: string; isManualCheck?: boolean }) => void
-  ): (() => void) => {
-    const handler = (
-      _e: Electron.IpcRendererEvent,
-      data: { message: string; isManualCheck?: boolean }
-    ): void => {
-      callback(data)
-    }
-    ipcRenderer.on('updater:error', handler)
-    return () => {
-      ipcRenderer.removeListener('updater:error', handler)
-    }
-  }
-}
-
 // Connection operations API
 const connectionOps = {
   create: (worktreeIds: string[]) => ipcRenderer.invoke('connection:create', { worktreeIds }),
@@ -2258,7 +2149,6 @@ if (process.contextIsolated) {
     contextBridge.exposeInMainWorld('loggingOps', loggingOps)
     contextBridge.exposeInMainWorld('scriptOps', scriptOps)
     contextBridge.exposeInMainWorld('terminalOps', terminalOps)
-    contextBridge.exposeInMainWorld('updaterOps', updaterOps)
     contextBridge.exposeInMainWorld('connectionOps', connectionOps)
     contextBridge.exposeInMainWorld('usageOps', usageOps)
     contextBridge.exposeInMainWorld('accountOps', accountOps)
@@ -2298,8 +2188,6 @@ if (process.contextIsolated) {
   window.scriptOps = scriptOps
   // @ts-expect-error (define in dts)
   window.terminalOps = terminalOps
-  // @ts-expect-error (define in dts)
-  window.updaterOps = updaterOps
   // @ts-expect-error (define in dts)
   window.connectionOps = connectionOps
   // @ts-expect-error (define in dts)

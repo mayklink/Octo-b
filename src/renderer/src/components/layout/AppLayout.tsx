@@ -19,7 +19,6 @@ import { useNotificationNavigation } from '@/hooks/useNotificationNavigation'
 import { useWindowFocusRefresh } from '@/hooks/useWindowFocusRefresh'
 import { useWorktreeWatcher } from '@/hooks/useWorktreeWatcher'
 import { useConnectionWatcher } from '@/hooks/useConnectionWatcher'
-import { useAutoUpdate } from '@/hooks/useAutoUpdate'
 import { useKeepAwake } from '@/hooks/useKeepAwake'
 import { ErrorBoundary, ErrorFallback } from '@/components/error'
 import { CreatePRModal } from '@/components/pr/CreatePRModal'
@@ -135,8 +134,6 @@ export function AppLayout({ children }: AppLayoutProps): React.JSX.Element {
   useWorktreeWatcher()
   // Watch connection member worktrees for filesystem + .git changes
   useConnectionWatcher()
-  // Auto-update notifications
-  useAutoUpdate()
   // Keep the computer awake while any session is actively streaming (opt-in via settings)
   useKeepAwake()
 

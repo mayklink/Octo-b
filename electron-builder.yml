@@ -82,9 +82,3 @@ deb:
     - xdg-utils
     - libatspi2.0-0
     - libuuid1
-
-# ── Auto-update ───────────────────────────────────────
-publish:
-  - provider: github
-    owner: mayklink
-    repo: octob
