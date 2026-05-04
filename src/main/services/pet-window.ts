@@ -39,30 +39,8 @@ const OCTOB_MANIFEST: PetManifest = {
   defaultSize: 'M'
 }
 
-const CORGI_MANIFEST: PetManifest = {
-  id: 'corgi',
-  name: 'Corgi',
-  version: '1.0.0',
-  author: 'Octob',
-  assets: {
-    idle: 'assets/corgi-static.png',
-    working: 'assets/corgi-static.png',
-    question: 'assets/corgi-static.png',
-    permission: 'assets/corgi-static.png',
-    plan_ready: 'assets/corgi-static.png'
-  },
-  lottieAssets: {
-    working: 'assets/corgi-anim.lottie'
-  },
-  lottieScale: {
-    working: 1.55
-  },
-  defaultSize: 'M'
-}
-
 const PET_MANIFESTS: Record<string, PetManifest> = {
-  octob: OCTOB_MANIFEST,
-  corgi: CORGI_MANIFEST
+  octob: OCTOB_MANIFEST
 }
 
 const PET_SIZE_PX: Record<PetSize, number> = {
@@ -187,7 +165,7 @@ export function getPetConfig(): {
   position: PetPosition
   manifest: PetManifest
 } {
-  if (latestSettings.petId === 'bee') {
+  if (latestSettings.petId === 'bee' || latestSettings.petId === 'corgi') {
     persistPetSettings({ petId: 'octob' })
   }
   return {
@@ -195,7 +173,7 @@ export function getPetConfig(): {
     position: petWindow?.getPosition()
       ? { x: petWindow.getPosition()[0], y: petWindow.getPosition()[1] }
       : loadPetPosition(),
-    manifest: PET_MANIFESTS[latestSettings.petId === 'bee' ? 'octob' : latestSettings.petId] ??
+    manifest: PET_MANIFESTS[latestSettings.petId === 'bee' || latestSettings.petId === 'corgi' ? 'octob' : latestSettings.petId] ??
       OCTOB_MANIFEST
   }
 }
@@ -284,7 +262,7 @@ export function forwardStatusToPet(payload: PetStatusPayload): void {
 
 export function updatePetSettings(partial: Partial<PetSettings>): void {
   let next = { ...latestSettings, ...partial }
-  if (next.petId === 'bee') next = { ...next, petId: 'octob' }
+  if (next.petId === 'bee' || next.petId === 'corgi') next = { ...next, petId: 'octob' }
   latestSettings = next
 
   if (petWindow && !petWindow.isDestroyed()) {
@@ -306,7 +284,7 @@ export function persistPetSettings(partial: Partial<PetSettings>): void {
     const parsed = existing ? JSON.parse(existing) : {}
     const priorPet = { ...DEFAULT_PET_SETTINGS, ...(parsed.pet ?? {}) }
     const mergedPet = { ...priorPet, ...partial }
-    if (mergedPet.petId === 'bee') mergedPet.petId = 'octob'
+    if (mergedPet.petId === 'bee' || mergedPet.petId === 'corgi') mergedPet.petId = 'octob'
     getDatabase().setSetting(
       APP_SETTINGS_DB_KEY,
       JSON.stringify({

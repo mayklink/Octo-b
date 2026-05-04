@@ -1,7 +1,6 @@
 import { motion } from 'motion/react'
 import type * as React from 'react'
 import type { LoadedPet, PetSettings, PetState } from '@shared/types/pet'
-import { DotLottieSprite } from './DotLottieSprite'
 
 const SIZE_PX: Record<PetSettings['size'], number> = {
   S: 64,
@@ -65,9 +64,7 @@ export function PetSprite({
 }): React.JSX.Element {
   const size = SIZE_PX[settings.size]
   const overlay = overlayForState(state)
-  const lottieSrc = state === 'working' ? pet.resolvedLottieAssets?.working : undefined
-  const lottieScale = state === 'working' ? (pet.lottieScale?.working ?? 1) : 1
-  const activeAnimation = lottieSrc ? {} : animationForState(state)
+  const activeAnimation = animationForState(state)
 
   return (
     <button
@@ -87,17 +84,7 @@ export function PetSprite({
         {...activeAnimation}
       >
         {state === 'plan_ready' && <span className="pet-glow" />}
-        {lottieSrc ? (
-          <DotLottieSprite
-            src={lottieSrc}
-            fallbackSrc={pet.resolvedAssets[state]}
-            scale={lottieScale}
-            size={size}
-            state={state}
-          />
-        ) : (
-          <img src={pet.resolvedAssets[state]} alt="" draggable={false} />
-        )}
+        <img src={pet.resolvedAssets[state]} alt="" draggable={false} />
         {overlay && <span className={overlay.className}>{overlay.symbol}</span>}
       </motion.span>
     </button>

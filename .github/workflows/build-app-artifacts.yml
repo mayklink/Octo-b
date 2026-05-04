@@ -4,33 +4,13 @@ name: Build app (artifacts)
 
 on:
   workflow_dispatch:
-    inputs:
-      include_mac_unsigned:
-        description: 'macOS unsigned build (needs gh release ghostty-deps-v1 in this repo)'
-        required: false
-        type: boolean
-        default: false
 
 permissions:
   contents: read
 
 jobs:
-  meta:
-    runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.v.outputs.version }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - id: v
-        run: |
-          echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
-
   build-windows:
     name: Windows (NSIS + zip)
-    needs: meta
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -44,7 +24,33 @@ jobs:
           node-version: 22
           cache: yarn
 
+      - id: version
+        shell: bash
+        run: |
+          echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Windows node_modules
+        id: cache-node-modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            node_modules
+          key: windows-node22-modules-${{ hashFiles('package.json', 'yarn.lock', 'scripts/run-install-app-deps.cjs', 'scripts/run-electron-native-rebuild.cjs') }}
+          restore-keys: |
+            windows-node22-modules-
+
+      - name: Cache Electron downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~\AppData\Local\electron\Cache
+            ~\AppData\Local\electron-builder\Cache
+          key: ${{ runner.os }}-electron-${{ hashFiles('yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-electron-
+
       - run: yarn install:ci
+        if: steps.cache-node-modules.outputs.cache-hit != 'true'
 
       - run: yarn build
 
@@ -65,13 +71,12 @@ jobs:
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Octob-windows-v${{ needs.meta.outputs.version }}
+          name: Octob-windows-v${{ steps.version.outputs.version }}
           path: dist/
           if-no-files-found: error
 
   build-linux:
     name: Linux (AppImage + deb + tar.gz)
-    needs: meta
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -84,6 +89,20 @@ jobs:
         with:
           node-version: 22
           cache: yarn
+
+      - id: version
+        run: |
+          echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Electron downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/electron
+            ~/.cache/electron-builder
+          key: ${{ runner.os }}-electron-${{ hashFiles('yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-electron-
 
       - run: yarn install:ci
 
@@ -103,14 +122,12 @@ jobs:
       - name: Upload Linux artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Octob-linux-v${{ needs.meta.outputs.version }}
+          name: Octob-linux-v${{ steps.version.outputs.version }}
           path: dist/
           if-no-files-found: error
 
   build-mac-unsigned:
     name: macOS unsigned (dmg + zip)
-    needs: meta
-    if: ${{ inputs.include_mac_unsigned }}
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -119,6 +136,20 @@ jobs:
         with:
           node-version: 22
           cache: yarn
+
+      - id: version
+        run: |
+          echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Electron downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Caches/electron
+            ~/Library/Caches/electron-builder
+          key: ${{ runner.os }}-electron-${{ hashFiles('yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-electron-
 
       - name: Download libghostty
         run: |
@@ -156,6 +187,6 @@ jobs:
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Octob-macos-unsigned-v${{ needs.meta.outputs.version }}
+          name: Octob-macos-unsigned-v${{ steps.version.outputs.version }}
           path: dist/
           if-no-files-found: error

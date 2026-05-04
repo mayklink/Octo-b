@@ -368,14 +368,15 @@ async function loadSettingsFromDatabase(): Promise<AppSettings | null> {
           }
         }
 
-        if (result.pet.petId === 'bee') {
+        if (result.pet.petId === 'bee' || result.pet.petId === 'corgi') {
           result.pet = { ...result.pet, petId: 'octob' }
         }
 
-        const petWasLegacyBee =
+        const petWasLegacy =
           typeof parsed.pet === 'object' &&
           parsed.pet !== null &&
-          (parsed.pet as PetSettings).petId === 'bee'
+          ((parsed.pet as PetSettings).petId === 'bee' ||
+            (parsed.pet as PetSettings).petId === 'corgi')
 
         delete (result as Record<string, unknown>).reviewPromptType
 
@@ -421,7 +422,7 @@ async function loadSettingsFromDatabase(): Promise<AppSettings | null> {
           result.lastTaskSessionPromptTemplateId = null
         }
 
-        if (petWasLegacyBee) {
+        if (petWasLegacy) {
           await saveToDatabase(result)
         }
 
