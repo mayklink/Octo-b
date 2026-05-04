@@ -1,0 +1,78 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+out/
+*.tsbuildinfo
+
+# Environment
+.env
+.env.*
+!.env.signing.example
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Test coverage
+coverage/
+
+# Playwright
+test-results/
+playwright-report/
+
+# Electron Builder
+release/
+
+# Cached vendor binaries (e.g. libghostty.a)
+vendor/
+
+# Database files
+*.sqlite
+*.sqlite3
+*.db
+
+# Certificates and keys
+*.pem
+*.key
+*.p12
+*.cert
+*.crt
+*.pfx
+
+# Local debug/playground scripts
+scripts/*
+!scripts/generate-icon.py
+!scripts/release-canary.sh
+!scripts/release-github.sh
+!scripts/finalize.sh
+!scripts/release.sh
+!scripts/prepare-win-deps.sh
+!scripts/codex-app-server-probe.ts
+# Electron native install / rebuild (postinstall + dev/build gates)
+!scripts/run-install-app-deps.cjs
+!scripts/run-electron-native-rebuild.cjs
+!scripts/ensure-electron-native-modules.cjs
+!scripts/electron-native-fingerprint.cjs
+
+# Claude worktrees
+.claude/worktrees/
+
+# Windows cross-build cache
+.win-natives/
+.mac-natives-backup/
+
+# Superpowers brainstorm artifacts
+.superpowers/brainstorm/
