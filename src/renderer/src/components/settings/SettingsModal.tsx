@@ -7,7 +7,6 @@ import {
   Code,
   Terminal,
   Keyboard,
-  Download,
   Shield,
   Eye,
   Wrench,
@@ -25,7 +24,6 @@ import { SettingsModels } from './SettingsModels'
 import { SettingsEditor } from './SettingsEditor'
 import { SettingsTerminal } from './SettingsTerminal'
 import { SettingsShortcuts } from './SettingsShortcuts'
-import { SettingsUpdates } from './SettingsUpdates'
 import { SettingsSecurity } from './SettingsSecurity'
 import { SettingsPrivacy } from './SettingsPrivacy'
 import { SettingsIntegrations } from './SettingsIntegrations'
@@ -49,7 +47,6 @@ type SettingsSectionId =
   | 'privacy'
   | 'shortcuts'
   | 'advanced'
-  | 'updates'
 
 export function SettingsModal(): React.JSX.Element {
   const { t } = useTranslation()
@@ -75,8 +72,7 @@ export function SettingsModal(): React.JSX.Element {
         { id: 'security' as const, label: t('settings.nav.security'), icon: Shield },
         { id: 'privacy' as const, label: t('settings.nav.privacy'), icon: Eye },
         { id: 'shortcuts' as const, label: t('settings.nav.shortcuts'), icon: Keyboard },
-        { id: 'advanced' as const, label: t('settings.nav.advanced'), icon: Wrench },
-        { id: 'updates' as const, label: t('settings.nav.updates'), icon: Download }
+        { id: 'advanced' as const, label: t('settings.nav.advanced'), icon: Wrench }
       ] satisfies ReadonlyArray<{ id: SettingsSectionId; label: string; icon: typeof Palette }>,
     [t]
   )
@@ -143,7 +139,6 @@ export function SettingsModal(): React.JSX.Element {
             {activeSection === 'security' && <SettingsSecurity />}
             {activeSection === 'privacy' && <SettingsPrivacy />}
             {activeSection === 'shortcuts' && <SettingsShortcuts />}
-            {activeSection === 'updates' && <SettingsUpdates />}
             {activeSection === 'advanced' && <SettingsAdvanced />}
           </div>
         </div>

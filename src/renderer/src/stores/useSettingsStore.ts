@@ -537,10 +537,6 @@ export const useSettingsStore = create<SettingsState>()(
         // Persist to database
         const settings = extractSettings({ ...get(), [key]: value } as SettingsState)
         saveToDatabase(settings)
-        // Notify main process of channel change
-        if (key === 'updateChannel' && window.updaterOps?.setChannel) {
-          window.updaterOps.setChannel(value as string)
-        }
         if (key === 'pet' && window.petOps) {
           const pet = value as PetSettings
           window.petOps.updateSettings(pet)
