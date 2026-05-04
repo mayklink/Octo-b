@@ -60,6 +60,7 @@ nsis:
 linux:
   icon: resources/icon.png
   category: Development
+  maintainer: "Mayk Bublitz <noreply@octob.local>"
   target:
     - target: AppImage
       arch:
