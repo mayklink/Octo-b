@@ -151,25 +151,9 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-electron-
 
-      - name: Download libghostty
-        run: |
-          mkdir -p vendor
-          gh release download ghostty-deps-v1 -p libghostty.a -D vendor/
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - run: pip3 install --break-system-packages setuptools
-
       - run: yarn install:ci
 
-      - name: Build Ghostty native addon
-        run: yarn build:native
-        env:
-          GHOSTTY_LIB_PATH: ${{ github.workspace }}/vendor/libghostty.a
-
       - run: yarn build
-        env:
-          GHOSTTY_LIB_PATH: ${{ github.workspace }}/vendor/libghostty.a
 
       - name: Package (macOS, unsigned, no notarize)
         run: yarn electron-builder --mac --publish never -c.mac.notarize=false
