@@ -1,4 +1,5 @@
 import { app } from 'electron'
+import { platform } from 'os'
 import { join } from 'path'
 import {
   existsSync,
@@ -45,7 +46,8 @@ export function deleteConnectionDir(connectionPath: string): void {
 }
 
 export function createSymlink(targetPath: string, symlinkPath: string): void {
-  symlinkSync(targetPath, symlinkPath, 'dir')
+  const linkType = platform() === 'win32' ? 'junction' : 'dir'
+  symlinkSync(targetPath, symlinkPath, linkType)
   log.info('Created symlink', { target: targetPath, link: symlinkPath })
 }
 

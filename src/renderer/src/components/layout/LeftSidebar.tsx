@@ -11,6 +11,7 @@ import {
   AddProjectButton,
   SortProjectsButton,
   RecentToggleButton,
+  ExpandProjectsButton,
   FilterChips
 } from '@/components/projects'
 import { ConnectionList } from '@/components/connections'
@@ -166,6 +167,7 @@ export function LeftSidebar(): React.JSX.Element {
             </div>
             <div className="flex items-center gap-1">
               <RecentToggleButton />
+              <ExpandProjectsButton />
               <SortProjectsButton />
               <AddProjectButton />
             </div>
