@@ -60,6 +60,7 @@ interface ProjectState {
   ) => Promise<boolean>
   selectProject: (id: string | null, options?: ProjectSelectionOptions) => void
   toggleProjectExpanded: (id: string) => void
+  setAllProjectsExpanded: (expanded: boolean, projectIds?: string[]) => void
   setEditingProject: (id: string | null) => void
   touchProject: (id: string) => Promise<void>
   refreshLanguage: (projectId: string, detectionPath?: string) => Promise<void>
@@ -300,6 +301,25 @@ export const useProjectStore = create<ProjectState>()(
             newExpandedIds.delete(id)
           } else {
             newExpandedIds.add(id)
+          }
+          return { expandedProjectIds: newExpandedIds }
+        })
+      },
+
+      // Expand or collapse all known projects, preserving any persisted ids outside the target set
+      setAllProjectsExpanded: (expanded: boolean, projectIds?: string[]) => {
+        set((state) => {
+          const targetIds = projectIds ?? state.projects.map((project) => project.id)
+
+          if (expanded) {
+            return {
+              expandedProjectIds: new Set([...state.expandedProjectIds, ...targetIds])
+            }
+          }
+
+          const newExpandedIds = new Set(state.expandedProjectIds)
+          for (const id of targetIds) {
+            newExpandedIds.delete(id)
           }
           return { expandedProjectIds: newExpandedIds }
         })

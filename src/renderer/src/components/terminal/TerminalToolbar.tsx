@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { Search, X, ChevronUp, ChevronDown, RotateCcw, Trash2 } from 'lucide-react'
+import { Search, X, ChevronUp, ChevronDown, RotateCcw, Trash2, Copy } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { TerminalBackendType } from './backends/types'
 
@@ -13,6 +13,7 @@ interface TerminalToolbarProps {
   onSearchNext: () => void
   onSearchPrev: () => void
   onSearchClose: () => void
+  onCopy: () => void
   onRestart: () => void
   onClear: () => void
   backendType?: TerminalBackendType
@@ -28,6 +29,7 @@ export function TerminalToolbar({
   onSearchNext,
   onSearchPrev,
   onSearchClose,
+  onCopy,
   onRestart,
   onClear,
   backendType = 'xterm'
@@ -135,6 +137,14 @@ export function TerminalToolbar({
           <Search className="h-3.5 w-3.5" />
         </button>
       )}
+      <button
+        onClick={onCopy}
+        className="p-1 text-muted-foreground hover:text-foreground rounded transition-colors"
+        title="Copy terminal logs"
+        data-testid="terminal-copy"
+      >
+        <Copy className="h-3.5 w-3.5" />
+      </button>
       <button
         onClick={onClear}
         className="p-1 text-muted-foreground hover:text-foreground rounded transition-colors"

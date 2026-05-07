@@ -47,14 +47,17 @@ export async function createConnectionOp(
   worktreeIds: string[]
 ): Promise<{ success: boolean; connection?: ConnectionWithMembers; error?: string }> {
   log.info('Creating connection', { worktreeCount: worktreeIds.length })
+  let connectionId: string | null = null
+  let dirPath: string | null = null
   try {
     // Use a short random ID for the directory name (avoids filesystem issues with special chars)
     const dirName = randomUUID().slice(0, 8)
-    const dirPath = createConnectionDir(dirName)
+    dirPath = createConnectionDir(dirName)
 
     // Create the DB connection record with placeholder name and random color
     const color = generateConnectionColor()
     const connection = db.createConnection({ name: dirName, path: dirPath, color })
+    connectionId = connection.id
 
     // For each worktree, look up its data, derive symlink name, create symlink + member
     const existingSymlinkNames: string[] = []
@@ -105,6 +108,20 @@ export async function createConnectionOp(
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     log.error('Connection creation failed', error instanceof Error ? error : new Error(message))
+    if (connectionId) {
+      try {
+        db.deleteConnection(connectionId)
+      } catch {
+        // Best-effort rollback
+      }
+    }
+    if (dirPath) {
+      try {
+        deleteConnectionDir(dirPath)
+      } catch {
+        // Best-effort rollback
+      }
+    }
     return { success: false, error: message }
   }
 }

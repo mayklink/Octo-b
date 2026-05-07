@@ -9,6 +9,7 @@ import { TerminalToolbar } from './TerminalToolbar'
 import { XtermBackend } from './backends/XtermBackend'
 import { GhosttyBackend } from './backends/GhosttyBackend'
 import type { TerminalBackend as ITerminalBackend, TerminalBackendType } from './backends/types'
+import { clipboardToast } from '@/lib/toast'
 import '@xterm/xterm/css/xterm.css'
 import '@/styles/xterm.css'
 
@@ -201,6 +202,26 @@ export const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(fu
     }
   }, [searchVisible])
 
+  const handleCopy = useCallback(async () => {
+    const text = backendRef.current?.getTextForCopy?.().trimEnd() ?? ''
+    if (!text) {
+      clipboardToast.failed()
+      return
+    }
+
+    try {
+      await navigator.clipboard.writeText(text)
+      clipboardToast.copied('Terminal logs')
+    } catch {
+      try {
+        await window.projectOps.copyToClipboard(text)
+        clipboardToast.copied('Terminal logs')
+      } catch {
+        clipboardToast.failed()
+      }
+    }
+  }, [])
+
   /**
    * Set up the terminal with the given backend type.
    */
@@ -388,6 +409,7 @@ export const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(fu
         onSearchNext={handleSearchNext}
         onSearchPrev={handleSearchPrev}
         onSearchClose={handleSearchClose}
+        onCopy={handleCopy}
         onRestart={handleRestart}
         onClear={() => backendRef.current?.clear()}
         backendType={activeBackendTypeRef.current || 'xterm'}

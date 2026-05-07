@@ -66,6 +66,9 @@ export interface TerminalBackend {
   /** Clear the terminal scrollback */
   clear(): void
 
+  /** Return selected text, or terminal buffer text when no selection exists */
+  getTextForCopy?(): string
+
   /** Update the terminal theme at runtime (re-reads CSS variables) */
   updateTheme?(): void
 
