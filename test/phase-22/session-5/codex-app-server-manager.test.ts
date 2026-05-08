@@ -31,6 +31,7 @@ vi.mock('node:child_process', async (importOriginal) => {
 
 import {
   CodexAppServerManager,
+  buildCodexConfigOverrides,
   type CodexSessionContext,
   type CodexProviderSession
 } from '../../../src/main/services/codex-app-server-manager'
@@ -128,6 +129,28 @@ describe('CodexAppServerManager — collaborationMode in sendTurn', () => {
     ).rejects.toThrow(
       'Installed Codex CLI does not support app-server: /usr/local/bin/codex. Upgrade @openai/codex to 0.118.0 or newer.'
     )
+  })
+
+  it('builds Codex thread config overrides for MCP servers', () => {
+    expect(
+      buildCodexConfigOverrides({
+        mcpServers: {
+          octob: {
+            command: 'node',
+            args: ['server.js'],
+            env: { OCTOB_TOKEN: 'secret' }
+          }
+        }
+      })
+    ).toEqual({
+      mcp_servers: {
+        octob: {
+          command: 'node',
+          args: ['server.js'],
+          env: { OCTOB_TOKEN: 'secret' }
+        }
+      }
+    })
   })
 
   it('includes collaborationMode with mode: plan and plan developer instructions when interactionMode is plan', async () => {

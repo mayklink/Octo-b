@@ -304,6 +304,70 @@ describe('ClaudeCodeImplementer – prompt streaming (Session 4)', () => {
       const callArgs = mockQuery.mock.calls[0][0]
       expect(callArgs.options.resume).toBe('real-sdk-id-1')
     })
+
+    it('passes Octob MCP config to Claude and isolates old CLI MCP settings', async () => {
+      impl.setDatabaseService({
+        getSetting: vi.fn().mockReturnValue(
+          JSON.stringify({
+            mcpServers: [
+              {
+                id: 'mcp-1',
+                enabled: true,
+                name: 'local-tools',
+                transport: 'stdio',
+                command: 'node',
+                args: 'server.js --flag "two words"',
+                env: [{ name: 'FOO', value: 'bar' }],
+                url: '',
+                headers: []
+              },
+              {
+                id: 'mcp-2',
+                enabled: true,
+                name: 'remote-tools',
+                transport: 'http',
+                command: '',
+                args: '',
+                env: [],
+                url: 'https://example.com/mcp',
+                headers: [{ name: 'Authorization', value: 'Bearer token' }]
+              }
+            ]
+          })
+        ),
+        getSession: vi.fn().mockReturnValue(null),
+        updateSession: vi.fn()
+      } as any)
+      const { sessionId } = await impl.connect('/proj', 'octob-1')
+
+      const iter = createMockQueryIterator([
+        {
+          type: 'assistant',
+          session_id: 'sdk-1',
+          content: [{ type: 'text', text: 'Using MCP' }]
+        }
+      ])
+      mockQuery.mockReturnValue(iter)
+
+      await impl.prompt('/proj', sessionId, 'use tools')
+
+      const callArgs = mockQuery.mock.calls[0][0]
+      expect(callArgs.options.mcpServers).toEqual({
+        'local-tools': {
+          type: 'stdio',
+          command: 'node',
+          args: ['server.js', '--flag', 'two words'],
+          env: { FOO: 'bar' }
+        },
+        'remote-tools': {
+          type: 'http',
+          url: 'https://example.com/mcp',
+          headers: { Authorization: 'Bearer token' }
+        }
+      })
+      expect(callArgs.options.strictMcpConfig).toBe(true)
+      expect(callArgs.options.settingSources).toEqual(['project'])
+    })
   })
 
   // ── DB materialization update ─────────────────────────────────────

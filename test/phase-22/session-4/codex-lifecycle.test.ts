@@ -107,6 +107,69 @@ describe('CodexImplementer lifecycle', () => {
       })
     })
 
+    it('passes configured MCP servers to Codex session startup', async () => {
+      impl.setDatabaseService({
+        getSetting: vi.fn().mockReturnValue(
+          JSON.stringify({
+            mcpServers: [
+              {
+                id: 'mcp-1',
+                enabled: true,
+                name: 'local-tools',
+                transport: 'stdio',
+                command: 'node',
+                args: 'server.js --flag "two words"',
+                env: [{ name: 'FOO', value: 'bar' }],
+                url: '',
+                headers: []
+              },
+              {
+                id: 'mcp-2',
+                enabled: true,
+                name: 'remote-tools',
+                transport: 'http',
+                command: '',
+                args: '',
+                env: [],
+                url: 'https://example.com/mcp',
+                headers: [{ name: 'Authorization', value: 'Bearer token' }]
+              }
+            ]
+          })
+        )
+      } as any)
+
+      mockManager.startSession.mockResolvedValue({
+        provider: 'codex',
+        status: 'ready',
+        threadId: 'thread-abc',
+        cwd: '/test/project',
+        model: 'gpt-5.4',
+        activeTurnId: null,
+        resumeCursor: null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      })
+
+      await impl.connect('/test/project', 'octob-session-1')
+
+      expect(mockManager.startSession).toHaveBeenCalledWith({
+        cwd: '/test/project',
+        model: CODEX_DEFAULT_MODEL,
+        mcpServers: {
+          'local-tools': {
+            command: 'node',
+            args: ['server.js', '--flag', 'two words'],
+            env: { FOO: 'bar' }
+          },
+          'remote-tools': {
+            url: 'https://example.com/mcp',
+            http_headers: { Authorization: 'Bearer token' }
+          }
+        }
+      })
+    })
+
     it('uses selected model when set', async () => {
       impl.setSelectedModel({ providerID: 'codex', modelID: 'gpt-5.3-codex' })
 

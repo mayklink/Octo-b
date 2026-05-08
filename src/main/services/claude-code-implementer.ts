@@ -11,6 +11,7 @@ import { CLAUDE_CODE_CAPABILITIES } from './agent-sdk-types'
 import type { DatabaseService } from '../db/database'
 import { readClaudeTranscript, translateEntry } from './claude-transcript-reader'
 import { getUserEnvironmentVariables } from './env-vars'
+import { getConfiguredClaudeMcpServers } from './mcp-settings'
 import { generateSessionTitle } from './claude-session-title'
 import { autoRenameWorktreeBranch } from './git-service'
 import { Options, PermissionMode } from '@anthropic-ai/claude-agent-sdk'
@@ -477,6 +478,7 @@ export class ClaudeCodeImplementer implements AgentSdkImplementer {
         this.selectedVariant ??
         modelDef?.defaultVariant ??
         'high') as Options['effort']
+      const mcpServers = getConfiguredClaudeMcpServers(this.dbService)
 
       // Build SDK query options
       const options: Options = {
@@ -487,7 +489,9 @@ export class ClaudeCodeImplementer implements AgentSdkImplementer {
         model: resolvedModel,
         includePartialMessages: true,
         enableFileCheckpointing: true,
-        settingSources: ['user', 'project', 'local'],
+        settingSources: ['project'],
+        mcpServers,
+        strictMcpConfig: true,
         extraArgs: { 'replay-user-messages': null },
         thinking: { type: 'adaptive' },
         effort: effortLevel,

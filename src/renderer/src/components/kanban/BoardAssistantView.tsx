@@ -239,7 +239,7 @@ function parseMcpKeyValues(value: string): McpServerConfig['env'] {
     .filter((row) => row.name.length > 0)
 }
 
-function saveMcpServerFromAssistant(server: McpServerConfig): string {
+async function saveMcpServerFromAssistant(server: McpServerConfig): Promise<string> {
   const settings = useSettingsStore.getState()
   const currentServers = settings.mcpServers
   const serverName = server.name.trim().toLowerCase()
@@ -251,14 +251,14 @@ function saveMcpServerFromAssistant(server: McpServerConfig): string {
   })
 
   if (existingIndex === -1) {
-    settings.updateSetting('mcpServers', [...currentServers, server])
+    await settings.updateSetting('mcpServers', [...currentServers, server])
     return `MCP do ${server.name} cadastrado e habilitado. Ele será enviado apenas para novas sessões/tarefas compatíveis.`
   }
 
   const nextServers = currentServers.map((current, index) =>
     index === existingIndex ? { ...server, id: current.id, enabled: true } : current
   )
-  settings.updateSetting('mcpServers', nextServers)
+  await settings.updateSetting('mcpServers', nextServers)
   return `MCP do ${server.name} atualizado e habilitado. Ele será enviado apenas para novas sessões/tarefas compatíveis.`
 }
 
@@ -1342,12 +1342,16 @@ export function BoardAssistantView({ projectId }: BoardAssistantViewProps): Reac
     }
   }, [addLocalSystemMessage, addLocalUserMessage, composerValue, scope, selectedTargetProjectId, sessionId, setComposerValue, setError, setStatus])
 
-  const handleSaveMcpDraft = useCallback(() => {
+  const handleSaveMcpDraft = useCallback(async () => {
     if (!mcpDraft) return
-    const message = saveMcpServerFromAssistant(mcpDraft)
-    setMcpDraft(null)
-    addLocalSystemMessage(message)
-    toast.success('MCP gravado.')
+    try {
+      const message = await saveMcpServerFromAssistant(mcpDraft)
+      setMcpDraft(null)
+      addLocalSystemMessage(message)
+      toast.success('MCP gravado.')
+    } catch {
+      toast.error('Falha ao gravar MCP.')
+    }
   }, [addLocalSystemMessage, mcpDraft])
 
   const handleCreateDrafts = useCallback(async (onlySelected: boolean) => {

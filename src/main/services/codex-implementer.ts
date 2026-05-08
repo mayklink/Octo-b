@@ -16,6 +16,7 @@ import { mapCodexEventToStreamEvents, contentStreamKindFromMethod } from './code
 import { asNumber, asObject, asString, toJsonSnapshot } from './codex-utils'
 import { logCodexLifecycleEvent } from './codex-debug-logger'
 import { generateCodexSessionTitle } from './codex-session-title'
+import { getConfiguredCodexMcpServers } from './mcp-settings'
 import type { DatabaseService } from '../db/database'
 import type { SessionMessageCreate } from '../db/types'
 import { notificationService } from './notification-service'
@@ -469,10 +470,12 @@ export class CodexImplementer implements AgentSdkImplementer {
 
     // Ensure the manager event listener is attached for HITL flows
     this.attachManagerListener()
+    const mcpServers = getConfiguredCodexMcpServers(this.dbService)
 
     const providerSession = await this.manager.startSession({
       cwd: worktreePath,
       model: resolvedModel,
+      ...(mcpServers ? { mcpServers } : {}),
       ...(this.codexBinaryPath ? { codexBinaryPath: this.codexBinaryPath } : {})
     })
 
@@ -543,10 +546,12 @@ export class CodexImplementer implements AgentSdkImplementer {
       this.attachManagerListener()
 
       const resolvedModel = resolveCodexModelSlug(this.selectedModel)
+      const mcpServers = getConfiguredCodexMcpServers(this.dbService)
       const providerSession = await this.manager.startSession({
         cwd: worktreePath,
         model: resolvedModel,
         resumeThreadId: agentSessionId,
+        ...(mcpServers ? { mcpServers } : {}),
         ...(this.codexBinaryPath ? { codexBinaryPath: this.codexBinaryPath } : {})
       })
 
@@ -2941,10 +2946,12 @@ export class CodexImplementer implements AgentSdkImplementer {
     }
 
     try {
+      const mcpServers = getConfiguredCodexMcpServers(this.dbService)
       const providerSession = await this.manager.startSession({
         cwd: worktreePath,
         model: resolveCodexModelSlug(persistedSession.model_id ?? this.selectedModel),
         resumeThreadId: agentSessionId,
+        ...(mcpServers ? { mcpServers } : {}),
         ...(this.codexBinaryPath ? { codexBinaryPath: this.codexBinaryPath } : {})
       })
 
