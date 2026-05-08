@@ -32,6 +32,7 @@ import type { ToolRequestUserInputAnswer } from '@shared/codex-schemas/v2/ToolRe
 import type { ServerNotification } from '@shared/codex-schemas/ServerNotification'
 import type { ServerRequest } from '@shared/codex-schemas/ServerRequest'
 import type { ThreadResumeParams } from '@shared/codex-schemas/v2/ThreadResumeParams'
+import type { JsonValue } from '@shared/codex-schemas/serde_json/JsonValue'
 
 const log = createLogger({ component: 'CodexAppServerManager' })
 
@@ -124,6 +125,7 @@ export interface CodexStartSessionOptions {
   resumeCursor?: string
   codexBinaryPath?: string
   codexHomePath?: string
+  mcpServers?: { [key in string]?: JsonValue }
 }
 
 // ── Turn input ────────────────────────────────────────────────────
@@ -195,6 +197,18 @@ function getDefaultCodexRuntimeConfig(): {
   return {
     approvalPolicy: 'never',
     sandbox: 'danger-full-access'
+  }
+}
+
+export function buildCodexConfigOverrides(
+  options: Pick<CodexStartSessionOptions, 'mcpServers'>
+): { [key in string]?: JsonValue } | undefined {
+  if (!options.mcpServers || Object.keys(options.mcpServers).length === 0) {
+    return undefined
+  }
+
+  return {
+    mcp_servers: options.mcpServers
   }
 }
 
@@ -477,6 +491,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
       const threadStartParams: Omit<ThreadStartParams, 'serviceTier'> & { serviceTier?: string | null } = {
         model: options.model ?? null,
         cwd: resolvedCwd,
+        config: buildCodexConfigOverrides(options) ?? null,
         experimentalRawEvents: false,
         persistExtendedHistory: false,
         ...getDefaultCodexRuntimeConfig()

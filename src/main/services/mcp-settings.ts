@@ -1,4 +1,6 @@
 import type { McpServer } from '@agentclientprotocol/sdk/dist/schema'
+import type { McpServerConfig as ClaudeMcpServerConfig } from '@anthropic-ai/claude-agent-sdk'
+import type { JsonValue } from '@shared/codex-schemas/serde_json/JsonValue'
 import { APP_SETTINGS_DB_KEY } from '@shared/types/settings'
 import type { McpKeyValue, McpServerConfig, McpTransport } from '@shared/types/mcp'
 import type { DatabaseService } from '../db/database'
@@ -134,5 +136,114 @@ export function getConfiguredMcpServers(dbService: DatabaseService | null): McpS
       .filter((server): server is McpServer => server !== null)
   } catch {
     return []
+  }
+}
+
+function keyValuesToRecord(rows: McpKeyValue[]): Record<string, string> {
+  const record: Record<string, string> = {}
+  for (const row of rows) {
+    const name = row.name.trim()
+    if (name) record[name] = row.value
+  }
+  return record
+}
+
+export function getConfiguredCodexMcpServers(
+  dbService: DatabaseService | null
+): { [key in string]?: JsonValue } | null {
+  if (!dbService) return null
+
+  try {
+    const raw = dbService.getSetting(APP_SETTINGS_DB_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as Record<string, unknown>
+    const entries: Array<[string, { [key in string]?: JsonValue }]> = []
+
+    for (const server of normalizeMcpServers(parsed.mcpServers)) {
+      if (!server.enabled) continue
+
+      const name = server.name.trim()
+      if (!name) continue
+
+      if (server.transport === 'stdio') {
+        const command = server.command.trim()
+        if (!command) continue
+
+        const config: { [key in string]?: JsonValue } = {
+          command,
+          args: splitCommandLineArgs(server.args)
+        }
+        const env = keyValuesToRecord(server.env)
+        if (Object.keys(env).length > 0) config.env = env
+
+        entries.push([name, config])
+        continue
+      }
+
+      const url = server.url.trim()
+      if (!url) continue
+
+      const config: { [key in string]?: JsonValue } = { url }
+      const headers = keyValuesToRecord(server.headers)
+      if (Object.keys(headers).length > 0) config.http_headers = headers
+
+      entries.push([name, config])
+    }
+
+    return entries.length > 0 ? Object.fromEntries(entries) : null
+  } catch {
+    return null
+  }
+}
+
+export function getConfiguredClaudeMcpServers(
+  dbService: DatabaseService | null
+): Record<string, ClaudeMcpServerConfig> {
+  if (!dbService) return {}
+
+  try {
+    const raw = dbService.getSetting(APP_SETTINGS_DB_KEY)
+    if (!raw) return {}
+    const parsed = JSON.parse(raw) as Record<string, unknown>
+    const entries: Array<[string, ClaudeMcpServerConfig]> = []
+
+    for (const server of normalizeMcpServers(parsed.mcpServers)) {
+      if (!server.enabled) continue
+
+      const name = server.name.trim()
+      if (!name) continue
+
+      if (server.transport === 'stdio') {
+        const command = server.command.trim()
+        if (!command) continue
+
+        const config: ClaudeMcpServerConfig = {
+          type: 'stdio',
+          command,
+          args: splitCommandLineArgs(server.args)
+        }
+        const env = keyValuesToRecord(server.env)
+        if (Object.keys(env).length > 0) config.env = env
+
+        entries.push([name, config])
+        continue
+      }
+
+      const url = server.url.trim()
+      if (!url) continue
+
+      const config: ClaudeMcpServerConfig = {
+        type: server.transport,
+        url
+      }
+      const headers = keyValuesToRecord(server.headers)
+      if (Object.keys(headers).length > 0) config.headers = headers
+
+      entries.push([name, config])
+    }
+
+    return Object.fromEntries(entries)
+  } catch {
+    return {}
   }
 }

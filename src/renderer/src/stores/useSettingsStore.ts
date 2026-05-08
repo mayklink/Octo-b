@@ -272,7 +272,7 @@ interface SettingsState extends AppSettings {
   openSettings: (section?: string) => void
   closeSettings: () => void
   setActiveSection: (section: string) => void
-  updateSetting: <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => void
+  updateSetting: <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => Promise<void>
   setSelectedModel: (
     model: SelectedModel | null,
     agentSdk?: AppSettings['defaultAgentSdk']
@@ -580,11 +580,11 @@ export const useSettingsStore = create<SettingsState>()(
         set({ activeSection: section })
       },
 
-      updateSetting: <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
+      updateSetting: async <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
         set({ [key]: value } as Partial<SettingsState>)
         // Persist to database
         const settings = extractSettings({ ...get(), [key]: value } as SettingsState)
-        saveToDatabase(settings)
+        await saveToDatabase(settings)
         if (key === 'pet' && window.petOps) {
           const pet = value as PetSettings
           window.petOps.updateSettings(pet)
