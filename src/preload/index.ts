@@ -5,6 +5,7 @@ import type {
   PetSettings,
   PetStatusPayload
 } from '../shared/types/pet'
+import type { McpServerConfig } from '../shared/types/mcp'
 
 // Force 100% zoom — Ghostty's native NSView overlay requires 1:1 CSS-to-AppKit
 // point mapping. Any zoom level breaks coordinate sync and causes misaligned
@@ -1718,6 +1719,11 @@ const settingsOps = {
     customCommand?: string
   ): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke('settings:openWithTerminal', worktreePath, terminalId, customCommand),
+
+  testMcpServer: (
+    server: McpServerConfig
+  ): Promise<{ success: boolean; message: string; toolCount?: number }> =>
+    ipcRenderer.invoke('settings:mcp:test', server),
 
   // Listen for settings updates from main process
   onSettingsUpdated: (callback: (data: unknown) => void): (() => void) => {
