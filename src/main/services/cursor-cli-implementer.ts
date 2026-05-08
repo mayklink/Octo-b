@@ -27,6 +27,7 @@ import { CURSOR_CLI_CAPABILITIES } from './agent-sdk-types'
 import { createLogger } from './logger'
 import type { DatabaseService } from '../db/database'
 import { getUserEnvironmentVariables } from './env-vars'
+import { getConfiguredMcpServers } from './mcp-settings'
 import type { OpenCodeStreamEvent } from '@shared/types/opencode'
 import {
   getAvailableCursorCliModels,
@@ -235,17 +236,18 @@ export class CursorCliImplementer implements AgentSdkImplementer {
       })
     }
 
+    const mcpServers = getConfiguredMcpServers(this.dbService)
     let acpSessionId: string
 
     if (params.resumeAcpSessionId) {
       await connection.resumeSession({
         cwd: params.worktreePath,
         sessionId: params.resumeAcpSessionId,
-        mcpServers: []
+        mcpServers
       })
       acpSessionId = params.resumeAcpSessionId
     } else {
-      const created = await connection.newSession({ cwd: params.worktreePath, mcpServers: [] })
+      const created = await connection.newSession({ cwd: params.worktreePath, mcpServers })
       acpSessionId = created.sessionId
     }
 

@@ -2,11 +2,17 @@ import { ipcMain } from 'electron'
 import { existsSync } from 'fs'
 import { spawn } from 'child_process'
 import { platform } from 'os'
+import { Client } from '@modelcontextprotocol/sdk/client/index.js'
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
+import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js'
 import { createLogger } from '../services'
 import { telemetryService } from '../services/telemetry-service'
 import { getDatabase } from '../db'
 import { detectEditors, detectTerminals, type DetectedApp } from '../services/settings-detection'
 import { APP_SETTINGS_DB_KEY } from '@shared/types/settings'
+import type { McpKeyValue, McpServerConfig } from '@shared/types/mcp'
+import { splitCommandLineArgs } from '../services/mcp-settings'
 
 const log = createLogger({ component: 'SettingsHandlers' })
 
@@ -54,6 +60,103 @@ function resolveEditorCommand(
     return { error: `Editor ${editorId} not found` }
   }
   return { command: editor.command }
+}
+
+function keyValuesToRecord(rows: McpKeyValue[]): Record<string, string> {
+  const record: Record<string, string> = {}
+  for (const row of rows) {
+    const name = row.name.trim()
+    if (name) record[name] = row.value
+  }
+  return record
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error(`Timeout depois de ${ms / 1000}s`)), ms)
+    promise.then(
+      (value) => {
+        clearTimeout(timeout)
+        resolve(value)
+      },
+      (error: unknown) => {
+        clearTimeout(timeout)
+        reject(error)
+      }
+    )
+  })
+}
+
+function isAuthRequired(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error)
+  return /unauthorized|authorization|auth|oauth|401|403/i.test(message)
+}
+
+async function testMcpServer(
+  server: McpServerConfig
+): Promise<{ success: boolean; message: string; toolCount?: number }> {
+  const name = server.name.trim() || 'MCP'
+  let transport: StdioClientTransport | StreamableHTTPClientTransport | SSEClientTransport | null = null
+  const client = new Client({ name: 'octob-mcp-test', version: '1.0.0' }, { capabilities: {} })
+
+  try {
+    if (server.transport === 'stdio') {
+      const command = server.command.trim()
+      if (!command) return { success: false, message: 'Informe o comando do MCP.' }
+
+      transport = new StdioClientTransport({
+        command,
+        args: splitCommandLineArgs(server.args),
+        env: {
+          ...process.env,
+          ...keyValuesToRecord(server.env)
+        },
+        stderr: 'pipe'
+      })
+    } else {
+      const url = server.url.trim()
+      if (!url) return { success: false, message: 'Informe a URL do MCP.' }
+      const headers = keyValuesToRecord(server.headers)
+      const requestInit = Object.keys(headers).length > 0 ? { headers } : undefined
+
+      transport =
+        server.transport === 'sse'
+          ? new SSEClientTransport(new URL(url), { requestInit })
+          : new StreamableHTTPClientTransport(new URL(url), { requestInit })
+    }
+
+    await withTimeout(client.connect(transport), 15000)
+    const tools = await withTimeout(client.listTools(), 15000)
+    const toolCount = tools.tools.length
+    return {
+      success: true,
+      toolCount,
+      message: `${name} conectado. ${toolCount} tool${toolCount === 1 ? '' : 's'} disponível${toolCount === 1 ? '' : 's'}.`
+    }
+  } catch (error) {
+    if (isAuthRequired(error)) {
+      return {
+        success: false,
+        message:
+          'O servidor respondeu, mas exige autenticação/OAuth. Faça a autenticação pelo agente compatível ou configure token/header.'
+      }
+    }
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : String(error)
+    }
+  } finally {
+    try {
+      await client.close()
+    } catch {
+      // ignore
+    }
+    try {
+      await transport?.close()
+    } catch {
+      // ignore
+    }
+  }
 }
 
 /** Fire-and-forget spawn: suppress errors and fully detach from parent event loop. */
@@ -318,4 +421,21 @@ export function registerSettingsHandlers(): void {
       return {}
     }
   })
+
+  ipcMain.handle(
+    'settings:mcp:test',
+    async (
+      _event,
+      server: McpServerConfig
+    ): Promise<{ success: boolean; message: string; toolCount?: number }> => {
+      try {
+        return await testMcpServer(server)
+      } catch (error) {
+        return {
+          success: false,
+          message: error instanceof Error ? error.message : String(error)
+        }
+      }
+    }
+  )
 }

@@ -953,6 +953,13 @@ declare global {
         success: boolean
         error?: string
       }>
+      testMcpServer: (
+        server: import('../shared/types/mcp').McpServerConfig
+      ) => Promise<{
+        success: boolean
+        message: string
+        toolCount?: number
+      }>
       onSettingsUpdated: (callback: (data: unknown) => void) => () => void
     }
     scriptOps: {

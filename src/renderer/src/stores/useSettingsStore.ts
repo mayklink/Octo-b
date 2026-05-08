@@ -3,6 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware'
 import { APP_SETTINGS_DB_KEY } from '@shared/types/settings'
 import type { UsageProvider } from '@shared/types/usage'
 import type { PetSettings } from '@shared/types/pet'
+import type { McpServerConfig } from '@shared/types/mcp'
 import {
   DEFAULT_REVIEW_PROMPT_PRESET_ID,
   getBuiltinReviewPromptType,
@@ -154,6 +155,9 @@ export interface AppSettings {
   // Advanced
   environmentVariables: Array<{ key: string; value: string }>
 
+  // MCP
+  mcpServers: McpServerConfig[]
+
   // Diagnostics
   perfDiagnosticsEnabled: boolean
   codexJsonlLoggingEnabled: boolean
@@ -239,6 +243,7 @@ const DEFAULT_SETTINGS: AppSettings = {
     hasHatched: false
   },
   environmentVariables: [],
+  mcpServers: [],
   perfDiagnosticsEnabled: false,
   codexJsonlLoggingEnabled: false,
   codexJsonlResetPerSession: true,
@@ -299,6 +304,47 @@ async function saveToDatabase(settings: AppSettings): Promise<void> {
   } catch (error) {
     console.error('Failed to save settings to database:', error)
   }
+}
+
+function normalizeKeyValues(value: unknown): Array<{ name: string; value: string }> {
+  if (!Array.isArray(value)) return []
+  return value
+    .map((row) => {
+      if (!row || typeof row !== 'object') return null
+      const typed = row as Record<string, unknown>
+      const name = typeof typed.name === 'string' ? typed.name.trim() : ''
+      const rowValue = typeof typed.value === 'string' ? typed.value : ''
+      if (!name) return null
+      return { name, value: rowValue }
+    })
+    .filter((row): row is { name: string; value: string } => row !== null)
+}
+
+function normalizeMcpServers(value: unknown): McpServerConfig[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .map((row) => {
+      if (!row || typeof row !== 'object') return null
+      const typed = row as Record<string, unknown>
+      const id = typeof typed.id === 'string' && typed.id ? typed.id : crypto.randomUUID()
+      const name = typeof typed.name === 'string' ? typed.name : ''
+      const transport =
+        typed.transport === 'http' || typed.transport === 'sse' || typed.transport === 'stdio'
+          ? typed.transport
+          : 'stdio'
+      return {
+        id,
+        enabled: typed.enabled !== false,
+        name,
+        transport,
+        command: typeof typed.command === 'string' ? typed.command : '',
+        args: typeof typed.args === 'string' ? typed.args : '',
+        env: normalizeKeyValues(typed.env),
+        url: typeof typed.url === 'string' ? typed.url : '',
+        headers: normalizeKeyValues(typed.headers)
+      }
+    })
+    .filter((server): server is McpServerConfig => server !== null)
 }
 
 async function loadSettingsFromDatabase(): Promise<AppSettings | null> {
@@ -365,7 +411,8 @@ async function loadSettingsFromDatabase(): Promise<AppSettings | null> {
           pet: {
             ...DEFAULT_SETTINGS.pet,
             ...(parsed.pet || {})
-          }
+          },
+          mcpServers: normalizeMcpServers(parsed.mcpServers)
         }
 
         if (result.pet.petId === 'bee' || result.pet.petId === 'corgi') {
@@ -479,6 +526,7 @@ function extractSettings(state: SettingsState): AppSettings {
     tipsEnabled: state.tipsEnabled,
     pet: state.pet,
     environmentVariables: state.environmentVariables,
+    mcpServers: state.mcpServers,
     perfDiagnosticsEnabled: state.perfDiagnosticsEnabled,
     codexJsonlLoggingEnabled: state.codexJsonlLoggingEnabled,
     codexJsonlResetPerSession: state.codexJsonlResetPerSession,
@@ -764,6 +812,7 @@ export const useSettingsStore = create<SettingsState>()(
         tipsEnabled: state.tipsEnabled,
         pet: state.pet,
         environmentVariables: state.environmentVariables,
+        mcpServers: state.mcpServers,
         perfDiagnosticsEnabled: state.perfDiagnosticsEnabled,
         codexJsonlLoggingEnabled: state.codexJsonlLoggingEnabled,
         codexJsonlResetPerSession: state.codexJsonlResetPerSession,

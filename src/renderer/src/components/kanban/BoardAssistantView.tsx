@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, type RefObject } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import {
   Bot,
   CheckSquare,
@@ -33,6 +33,7 @@ import { useSessionStore, BOARD_TAB_ID } from '@/stores/useSessionStore'
 import { useSettingsStore, type SelectedModel } from '@/stores/useSettingsStore'
 import { useWorktreeStore } from '@/stores/useWorktreeStore'
 import { useFileViewerStore } from '@/stores/useFileViewerStore'
+import type { McpServerConfig } from '@shared/types/mcp'
 import type { StreamingPart } from '@/components/sessions/SessionView'
 import type { QuestionRequest } from '@/stores/useQuestionStore'
 import type { CommandApprovalRequest } from '@/stores/useCommandApprovalStore'
@@ -45,12 +46,20 @@ const BOARD_ASSISTANT_RULES = [
   'You are Octob Board Assistant.',
   'Stay focused on helping the user create local kanban tickets for the current board scope.',
   'Do not claim tickets are created. The UI will create them only after explicit confirmation.',
-  'Ask concise clarifying questions when needed.',
+  'If the user wants to create tasks but the request is vague, ask concise clarifying questions until you have enough information.',
+  'Once you have enough information, propose draft tasks instead of creating them directly.',
   'When you are ready to propose tickets, append exactly one fenced code block tagged board-ticket-drafts.',
   'For project boards, the JSON schema is {"drafts":[{"draftKey":"string","title":"string","description":"string|null","projectId":"string","dependsOn":["draftKey"],"warnings":["string"]}]}.',
   'For other board scopes, the JSON schema is {"drafts":[{"title":"string","description":"string|null","warnings":["string"]}]}.',
   'When revising drafts, output a full replacement draft set in that code block.',
-  'Keep titles short, specific, and implementation-ready.'
+  'Keep titles short, specific, and implementation-ready.',
+  'If the user asks to configure/cadastrar an MCP, assist conversationally using the selected CLI agent.',
+  'For MCP setup, ask for all required information: provider, transport, authentication mode, tokens/env vars when needed, project scope when relevant, and safety options like read-only.',
+  'Do not save MCP settings yourself and do not claim they are saved.',
+  'When MCP information is complete, append exactly one fenced code block tagged octob-mcp-draft.',
+  'The MCP block must contain strict JSON shaped like {"name":"string","enabled":true,"transport":"stdio|http|sse","command":"string","args":"string","env":[{"name":"KEY","value":"VALUE"}],"url":"string","headers":[{"name":"Header","value":"Value"}]}.',
+  'For Supabase remote MCP, prefer https://mcp.supabase.com/mcp with read_only=true and project_ref when available.',
+  'For Notion remote MCP, prefer https://mcp.notion.com/mcp with OAuth unless the user explicitly chooses token/manual mode.'
 ].join('\n')
 
 function buildScopeKey(scope: BoardChatScope | null): string {
@@ -63,9 +72,14 @@ function buildScopeKey(scope: BoardChatScope | null): string {
 function sanitizeBoardMessageContent(message: BoardChatMessage): string {
   const withoutScaffolding = stripBoardAssistantScaffolding(message.content)
   if (message.role === 'assistant') {
-    const withoutDrafts = stripBoardDraftBlocks(withoutScaffolding)
+    const withoutDrafts = stripBoardDraftBlocks(withoutScaffolding).replace(MCP_DRAFT_BLOCK_RE, '').trim()
     const parsedDrafts = parseBoardAssistantDraftSet(message.content)
-    return withoutDrafts || (parsedDrafts ? 'Proposed ticket drafts below.' : withoutDrafts)
+    const parsedMcpDraft = parseMcpDraftFromMessage(message)
+    return (
+      withoutDrafts ||
+      (parsedDrafts ? 'Revisei as informações e preparei os rascunhos abaixo.' : '') ||
+      (parsedMcpDraft ? 'Revisei as informações e preparei o rascunho de MCP abaixo.' : '')
+    )
   }
   return withoutScaffolding
 }
@@ -79,6 +93,8 @@ function sanitizeStreamingParts(parts: StreamingPart[] | undefined, role: BoardC
     const nextText =
       role === 'assistant'
         ? stripBoardDraftBlocks(stripBoardAssistantScaffolding(baseText))
+            .replace(MCP_DRAFT_BLOCK_RE, '')
+            .trim()
         : stripBoardAssistantScaffolding(baseText)
     return { ...part, text: nextText }
   })
@@ -87,15 +103,15 @@ function sanitizeStreamingParts(parts: StreamingPart[] | undefined, role: BoardC
 function getStatusLabel(status: ReturnType<typeof useBoardChatStore.getState>['status']): string {
   switch (status) {
     case 'starting':
-      return 'Starting'
+      return 'Iniciando'
     case 'thinking':
-      return 'Thinking'
+      return 'Pensando'
     case 'awaiting_confirmation':
-      return 'Drafts ready'
+      return 'Rascunhos prontos'
     case 'error':
-      return 'Needs attention'
+      return 'Precisa de atenção'
     default:
-      return 'Ready'
+      return 'Pronto'
   }
 }
 
@@ -192,6 +208,94 @@ function buildBoardPrompt(input: string, scope: BoardChatScope, targetProjectId:
     'User request:',
     input
   ].join('\n')
+}
+
+interface ParsedMcpDraftResult {
+  messageId: string
+  draft: McpServerConfig
+}
+
+const MCP_DRAFT_BLOCK_CAPTURE_RE = /```octob-mcp-draft\s*([\s\S]*?)```/i
+const MCP_DRAFT_BLOCK_RE = /```octob-mcp-draft[\s\S]*?```/gi
+
+function createId(): string {
+  return crypto.randomUUID?.() ?? Math.random().toString(36).slice(2)
+}
+
+function formatMcpKeyValues(rows: McpServerConfig['env']): string {
+  return rows.map((row) => `${row.name}=${row.value}`).join('\n')
+}
+
+function parseMcpKeyValues(value: string): McpServerConfig['env'] {
+  return value
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const equalsIndex = line.indexOf('=')
+      if (equalsIndex === -1) return { name: line, value: '' }
+      return { name: line.slice(0, equalsIndex).trim(), value: line.slice(equalsIndex + 1) }
+    })
+    .filter((row) => row.name.length > 0)
+}
+
+function saveMcpServerFromAssistant(server: McpServerConfig): string {
+  const settings = useSettingsStore.getState()
+  const currentServers = settings.mcpServers
+  const serverName = server.name.trim().toLowerCase()
+  const serverUrl = server.url.trim().toLowerCase()
+  const existingIndex = currentServers.findIndex((current) => {
+    const currentName = current.name.trim().toLowerCase()
+    const currentUrl = current.url.trim().toLowerCase()
+    return currentName === serverName || (serverUrl.length > 0 && currentUrl === serverUrl)
+  })
+
+  if (existingIndex === -1) {
+    settings.updateSetting('mcpServers', [...currentServers, server])
+    return `MCP do ${server.name} cadastrado e habilitado. Ele será enviado apenas para novas sessões/tarefas compatíveis.`
+  }
+
+  const nextServers = currentServers.map((current, index) =>
+    index === existingIndex ? { ...server, id: current.id, enabled: true } : current
+  )
+  settings.updateSetting('mcpServers', nextServers)
+  return `MCP do ${server.name} atualizado e habilitado. Ele será enviado apenas para novas sessões/tarefas compatíveis.`
+}
+
+function normalizeMcpDraft(value: unknown): McpServerConfig | null {
+  if (!value || typeof value !== 'object') return null
+  const typed = value as Partial<McpServerConfig>
+  const transport =
+    typed.transport === 'stdio' || typed.transport === 'http' || typed.transport === 'sse'
+      ? typed.transport
+      : 'http'
+
+  return {
+    id: createId(),
+    enabled: typed.enabled !== false,
+    name: typeof typed.name === 'string' ? typed.name : '',
+    transport,
+    command: typeof typed.command === 'string' ? typed.command : '',
+    args: typeof typed.args === 'string' ? typed.args : '',
+    env: Array.isArray(typed.env) ? typed.env : [],
+    url: typeof typed.url === 'string' ? typed.url : '',
+    headers: Array.isArray(typed.headers) ? typed.headers : []
+  }
+}
+
+function parseMcpDraftFromMessage(message: BoardChatMessage): ParsedMcpDraftResult | null {
+  if (message.role !== 'assistant') return null
+  const match = message.content.match(MCP_DRAFT_BLOCK_CAPTURE_RE)
+  if (!match?.[1]) return null
+
+  try {
+    const parsed = JSON.parse(match[1]) as unknown
+    const draft = normalizeMcpDraft(parsed)
+    if (!draft) return null
+    return { messageId: message.id, draft }
+  } catch {
+    return null
+  }
 }
 
 async function ensureRuntimeSession(scope: BoardChatScope, targetProjectId: string): Promise<{
@@ -409,7 +513,7 @@ function BoardChatHeader({
             </select>
             {selectedTargetProject && (
               <span className="text-xs text-muted-foreground">
-                Targeting {selectedTargetProject.name}
+                Criando para {selectedTargetProject.name}
               </span>
             )}
           </div>
@@ -450,14 +554,14 @@ function BoardChatHeader({
               onClick={onResetModel}
               className="text-xs text-muted-foreground transition-colors hover:text-foreground"
             >
-              Use Default
+              Usar padrão
             </button>
           )}
         </div>
       </div>
 
       <div className="flex items-center gap-1">
-        <Button type="button" variant="ghost" size="icon" onClick={onClear} aria-label="Clear chat">
+        <Button type="button" variant="ghost" size="icon" onClick={onClear} aria-label="Limpar chat">
           <Trash2 className="h-4 w-4" />
         </Button>
       </div>
@@ -489,7 +593,7 @@ function BoardChatDraftProposalCard({
             </span>
             {draft.createdAt && (
               <span className="rounded-full border border-border/70 bg-muted/40 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-                Created
+                Criada
               </span>
             )}
           </div>
@@ -626,14 +730,14 @@ function BoardChatMessageList({
               <div className="space-y-3 rounded-3xl border border-border/70 bg-muted/20 p-3">
                 <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
                   <Sparkles className="h-3.5 w-3.5" />
-                  Draft proposals
+                  Rascunhos de tasks
                 </div>
                 <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                  <span>{drafts.length} drafts</span>
-                  <span>{dependencyCount} dependenc{dependencyCount === 1 ? 'y' : 'ies'}</span>
+                  <span>{drafts.length} rascunho{drafts.length === 1 ? '' : 's'}</span>
+                  <span>{dependencyCount} dependência{dependencyCount === 1 ? '' : 's'}</span>
                   {invalidDraftCount > 0 && (
                     <span className="text-destructive">
-                      {invalidDraftCount} invalid
+                      {invalidDraftCount} inválido{invalidDraftCount === 1 ? '' : 's'}
                     </span>
                   )}
                 </div>
@@ -644,28 +748,28 @@ function BoardChatMessageList({
                 </div>
                 <div className="flex flex-wrap items-center gap-2 border-t border-border/70 pt-3">
                   <Button type="button" size="sm" onClick={onCreateAll} disabled={hasInvalidDrafts}>
-                    Create all
+                    Criar tasks
                   </Button>
                   <Button
                     type="button"
                     size="sm"
                     variant="outline"
                     onClick={onCreateSelected}
-                    disabled={hasInvalidDrafts}
+                    disabled={hasInvalidDrafts || creatableSelectedCount === 0}
                   >
                     <CheckSquare className="h-4 w-4" />
-                    Create selected
+                    Criar selecionadas
                   </Button>
                   <Button type="button" size="sm" variant="ghost" onClick={onRevise}>
-                    Revise with AI
+                    Revisar com IA
                   </Button>
                   <Button type="button" size="sm" variant="ghost" onClick={onCancelDrafts}>
-                    Cancel
+                    Cancelar
                   </Button>
                   <span className="ml-auto text-xs text-muted-foreground">
                     {hasInvalidDrafts
-                      ? 'Fix validation issues first'
-                      : `${creatableSelectedCount}/${selectedCount} ready`}
+                      ? 'Corrija os rascunhos inválidos primeiro'
+                      : `${creatableSelectedCount}/${selectedCount} prontas para criar`}
                   </span>
                 </div>
               </div>
@@ -706,6 +810,114 @@ function BoardChatMessageList({
   )
 }
 
+function McpDraftCard({
+  draft,
+  onChange,
+  onSave,
+  onCancel
+}: {
+  draft: McpServerConfig
+  onChange: (draft: McpServerConfig) => void
+  onSave: () => void
+  onCancel: () => void
+}): React.JSX.Element {
+  return (
+    <div className="border-t border-border/70 bg-muted/20 px-4 py-3">
+      <div className="space-y-3 rounded-2xl border border-border/70 bg-background/80 p-3">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-foreground">Rascunho de MCP</p>
+            <p className="text-xs text-muted-foreground">
+              Revise antes de gravar. Ele só será usado por sessões/tarefas se estiver habilitado.
+            </p>
+          </div>
+          <label className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Checkbox
+              checked={draft.enabled}
+              onCheckedChange={(checked) => onChange({ ...draft, enabled: checked })}
+            />
+            Habilitado
+          </label>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="space-y-1 text-xs font-medium text-muted-foreground">
+            Nome
+            <input
+              value={draft.name}
+              onChange={(event) => onChange({ ...draft, name: event.target.value })}
+              className="h-8 w-full rounded-md border border-input bg-transparent px-3 text-sm text-foreground"
+            />
+          </label>
+          <label className="space-y-1 text-xs font-medium text-muted-foreground">
+            Transporte
+            <select
+              value={draft.transport}
+              onChange={(event) =>
+                onChange({ ...draft, transport: event.target.value as McpServerConfig['transport'] })
+              }
+              className="h-8 w-full rounded-md border border-input bg-transparent px-3 text-sm text-foreground"
+            >
+              <option value="http">HTTP</option>
+              <option value="sse">SSE</option>
+              <option value="stdio">stdio</option>
+            </select>
+          </label>
+        </div>
+
+        {draft.transport === 'stdio' ? (
+          <div className="space-y-3">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="space-y-1 text-xs font-medium text-muted-foreground">
+                Comando
+                <input
+                  value={draft.command}
+                  onChange={(event) => onChange({ ...draft, command: event.target.value })}
+                  className="h-8 w-full rounded-md border border-input bg-transparent px-3 text-sm text-foreground"
+                />
+              </label>
+              <label className="space-y-1 text-xs font-medium text-muted-foreground">
+                Argumentos
+                <input
+                  value={draft.args}
+                  onChange={(event) => onChange({ ...draft, args: event.target.value })}
+                  className="h-8 w-full rounded-md border border-input bg-transparent px-3 text-sm text-foreground"
+                />
+              </label>
+            </div>
+            <label className="space-y-1 text-xs font-medium text-muted-foreground">
+              Variáveis
+              <Textarea
+                value={formatMcpKeyValues(draft.env)}
+                onChange={(event) => onChange({ ...draft, env: parseMcpKeyValues(event.target.value) })}
+                className="min-h-[68px] font-mono text-xs"
+              />
+            </label>
+          </div>
+        ) : (
+          <label className="space-y-1 text-xs font-medium text-muted-foreground">
+            URL
+            <input
+              value={draft.url}
+              onChange={(event) => onChange({ ...draft, url: event.target.value })}
+              className="h-8 w-full rounded-md border border-input bg-transparent px-3 text-sm text-foreground"
+            />
+          </label>
+        )}
+
+        <div className="flex items-center justify-end gap-2">
+          <Button type="button" size="sm" variant="ghost" onClick={onCancel}>
+            Cancelar
+          </Button>
+          <Button type="button" size="sm" onClick={onSave}>
+            Gravar MCP
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function BoardChatComposer({
   value,
   disabled,
@@ -732,7 +944,7 @@ function BoardChatComposer({
           disabled={disabled}
           placeholder={
             disabled
-              ? 'Select a target project to start.'
+              ? 'Selecione um projeto de destino para começar.'
               : 'Can create local tickets. Ask for breakdowns, revisions, or smaller tasks.'
           }
           className="min-h-[84px] resize-none border-0 bg-transparent p-2 shadow-none focus-visible:ring-0"
@@ -810,6 +1022,7 @@ export function BoardAssistantView({ projectId }: BoardAssistantViewProps): Reac
   const activateScope = useBoardChatStore((state) => state.activateScope)
 
   const composerFocusRef = useRef<HTMLTextAreaElement | null>(null)
+  const [mcpDraft, setMcpDraft] = useState<McpServerConfig | null>(null)
   const availableAgentSdks = useSettingsStore((state) => state.availableAgentSdks)
   const defaultBoardAgentSdk = useSettingsStore((state) => resolveBoardChatAgentSdk(state.defaultAgentSdk))
   const effectiveAgentSdk = selectedAgentSdkOverride ?? defaultBoardAgentSdk
@@ -937,6 +1150,14 @@ export function BoardAssistantView({ projectId }: BoardAssistantViewProps): Reac
     return null
   }, [messages, scope, selectedTargetProjectId])
 
+  const latestMcpDraftResult = useMemo(() => {
+    for (const message of [...messages].reverse()) {
+      const parsed = parseMcpDraftFromMessage(message)
+      if (parsed) return parsed
+    }
+    return null
+  }, [messages])
+
   useEffect(() => {
     if (!latestDraftResult || !scope) return
     if (draftSourceMessageId === latestDraftResult.messageId) return
@@ -977,6 +1198,11 @@ export function BoardAssistantView({ projectId }: BoardAssistantViewProps): Reac
       latestDraftResult.messageId
     )
   }, [draftSourceMessageId, latestDraftResult, projects, scope, selectedTargetProjectId, setDrafts])
+
+  useEffect(() => {
+    if (!latestMcpDraftResult) return
+    setMcpDraft(latestMcpDraftResult.draft)
+  }, [latestMcpDraftResult])
 
   useEffect(() => {
     if (error) {
@@ -1086,20 +1312,20 @@ export function BoardAssistantView({ projectId }: BoardAssistantViewProps): Reac
       scope.kind === 'project' ? scope.projectId : selectedTargetProjectId
 
     if (!targetProjectId) {
-      setError('Select a target project before starting the assistant.')
-      addLocalSystemMessage('Select a target project before starting the assistant.')
+      setError('Selecione um projeto de destino antes de iniciar o assistente.')
+      addLocalSystemMessage('Selecione um projeto de destino antes de iniciar o assistente.')
       return
     }
 
     try {
       setError(null)
-      setStatus(sessionId ? 'thinking' : 'starting')
       addLocalUserMessage(input)
       setComposerValue('')
 
+      setStatus(sessionId ? 'thinking' : 'starting')
       const runtime = await ensureRuntimeSession(scope, targetProjectId)
       if (!runtime) {
-        throw new Error('Unable to start a board assistant session for this board scope.')
+        throw new Error('Não foi possível iniciar o assistente para este quadro.')
       }
 
       const prompt = buildBoardPrompt(input, scope, targetProjectId)
@@ -1108,13 +1334,21 @@ export function BoardAssistantView({ projectId }: BoardAssistantViewProps): Reac
         throw new Error(result.error || 'The assistant could not send your message.')
       }
     } catch (sendError) {
-      const message = sendError instanceof Error ? sendError.message : 'Failed to send assistant message.'
+      const message = sendError instanceof Error ? sendError.message : 'Falha ao enviar mensagem para o assistente.'
       setError(message)
       setStatus('error')
       addLocalSystemMessage(message)
       toast.error(message)
     }
   }, [addLocalSystemMessage, addLocalUserMessage, composerValue, scope, selectedTargetProjectId, sessionId, setComposerValue, setError, setStatus])
+
+  const handleSaveMcpDraft = useCallback(() => {
+    if (!mcpDraft) return
+    const message = saveMcpServerFromAssistant(mcpDraft)
+    setMcpDraft(null)
+    addLocalSystemMessage(message)
+    toast.success('MCP gravado.')
+  }, [addLocalSystemMessage, mcpDraft])
 
   const handleCreateDrafts = useCallback(async (onlySelected: boolean) => {
     const draftsToCreate = drafts.filter(
@@ -1127,7 +1361,7 @@ export function BoardAssistantView({ projectId }: BoardAssistantViewProps): Reac
     try {
       const invalidDrafts = draftsToCreate.filter((draft) => draft.validationIssues.length > 0)
       if (invalidDrafts.length > 0) {
-        throw new Error('Fix draft validation issues before creating tickets.')
+        throw new Error('Corrija os rascunhos inválidos antes de criar as tasks.')
       }
 
       const draftKeysInBatch = new Set(draftsToCreate.map((draft) => draft.draftKey))
@@ -1147,14 +1381,14 @@ export function BoardAssistantView({ projectId }: BoardAssistantViewProps): Reac
 
       markDraftsCreated(draftsToCreate.map((draft) => draft.id))
       addLocalSystemMessage(
-        `Created ${result.tickets.length} ticket${result.tickets.length === 1 ? '' : 's'} and ${result.dependencies.length} dependenc${result.dependencies.length === 1 ? 'y' : 'ies'} in ${draftsToCreate[0].projectName}.`
+        `Criei ${result.tickets.length} task${result.tickets.length === 1 ? '' : 's'} e ${result.dependencies.length} dependência${result.dependencies.length === 1 ? '' : 's'} em ${draftsToCreate[0].projectName}.`
       )
       navigateToBoard()
       toast.success(
-        `Created ${result.tickets.length} ticket${result.tickets.length === 1 ? '' : 's'}.`
+        `Criei ${result.tickets.length} task${result.tickets.length === 1 ? '' : 's'}.`
       )
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to create one or more tickets.'
+      const message = error instanceof Error ? error.message : 'Falha ao criar uma ou mais tasks.'
       toast.error(message)
     }
   }, [addLocalSystemMessage, drafts, markDraftsCreated, navigateToBoard])
@@ -1197,13 +1431,13 @@ export function BoardAssistantView({ projectId }: BoardAssistantViewProps): Reac
   }, [addLocalSystemMessage, defaultBoardAgentSdk, handleDiscardConversation, setSelectedAgentSdkOverride, setSelectedModelOverride])
 
   const handleRevise = useCallback(() => {
-    setComposerValue('Revise the current draft tickets. Keep them small, specific, and implementation-ready.')
+    setComposerValue('Revise os rascunhos atuais. Mantenha as tasks pequenas, específicas e prontas para implementação.')
     composerFocusRef.current?.focus()
   }, [setComposerValue])
 
   const handleCancelDrafts = useCallback(() => {
     clearDrafts()
-    addLocalSystemMessage('Draft proposals discarded.')
+    addLocalSystemMessage('Rascunhos descartados.')
   }, [addLocalSystemMessage, clearDrafts])
 
   const handleSelectTargetProject = useCallback(async (nextProjectId: string) => {
@@ -1347,6 +1581,18 @@ export function BoardAssistantView({ projectId }: BoardAssistantViewProps): Reac
           void handleCommandApprovalReply(requestId, approved, remember, pattern, patterns)
         }}
       />
+
+      {mcpDraft && (
+        <McpDraftCard
+          draft={mcpDraft}
+          onChange={setMcpDraft}
+          onSave={handleSaveMcpDraft}
+          onCancel={() => {
+            setMcpDraft(null)
+            addLocalSystemMessage('Rascunho de MCP descartado.')
+          }}
+        />
+      )}
 
       <BoardChatComposer
         value={composerValue}

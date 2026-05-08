@@ -334,6 +334,34 @@ export const settings = {
     noConfigNeeded: 'No configuration needed. Uses GitHub CLI authentication by default.',
     connected: '{{name}}: Connected!',
     authFailed: 'Authentication failed',
-    testFailed: 'Test failed: {{message}}'
+    testFailed: 'Test failed: {{message}}',
+    mcpHeading: 'MCP servers',
+    mcpDescription:
+      'Register MCP servers so compatible agents can query external tools and context, such as Notion.',
+    addMcp: 'Add MCP',
+    addNotionPreset: 'Notion preset',
+    addSupabasePreset: 'Supabase preset',
+    testMcp: 'Test',
+    noMcpServers: 'No MCP servers registered.',
+    enabled: 'Enabled',
+    name: 'Name',
+    namePlaceholder: 'e.g. Notion',
+    transport: 'Transport',
+    stdio: 'stdio',
+    http: 'HTTP',
+    sse: 'SSE',
+    command: 'Command',
+    commandPlaceholder: 'e.g. npx',
+    args: 'Arguments',
+    argsPlaceholder: 'e.g. -y mcp-remote https://mcp.notion.com/mcp',
+    env: 'Environment variables',
+    envPlaceholder: 'KEY=value',
+    url: 'URL',
+    urlPlaceholder: 'https://mcp.supabase.com/mcp?read_only=true',
+    headers: 'Headers',
+    headersPlaceholder: 'Authorization=Bearer your_token',
+    removeMcp: 'Remove MCP',
+    mcpSupportHint:
+      'Only enabled servers are sent to new sessions/tasks for compatible ACP agents, such as Cursor CLI and Mistral Vibe. Remote MCPs such as Notion and Supabase use OAuth when the agent requests authentication.'
   }
 }
