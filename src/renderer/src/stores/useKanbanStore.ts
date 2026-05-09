@@ -597,10 +597,27 @@ export const useKanbanStore = create<KanbanState>()(
             switch (event.type) {
               case 'session_completed': {
                 if (ticket.mode === 'build' && ticket.column !== 'review') {
-                  // Auto-advance build ticket to review column (idempotent — skip if already there)
-                  get()
-                    .moveTicket(ticket.id, projectId, 'review', ticket.sort_order)
-                    .catch(() => {})
+                  // Build finished: move to review and start an automated code review.
+                  // Plan completions also move to review below, but intentionally do not
+                  // create code review sessions.
+                  void (async () => {
+                    try {
+                      await get().moveTicket(ticket.id, projectId, 'review', ticket.sort_order)
+                      if (!ticket.worktree_id) return
+
+                      const worktree = await window.db.worktree.get(ticket.worktree_id)
+                      if (!worktree?.path) return
+
+                      const { startCodeReviewSession } = await import('../lib/code-review')
+                      await startCodeReviewSession({
+                        worktreeId: ticket.worktree_id,
+                        projectId,
+                        worktreePath: worktree.path
+                      })
+                    } catch (err) {
+                      console.error('Failed to start automatic code review:', err)
+                    }
+                  })()
                 } else if (isPlanLike(ticket.mode) && !ticket.plan_ready) {
                   // Plan finished — set plan_ready and move to review for user attention
                   get()
