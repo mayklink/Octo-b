@@ -575,12 +575,9 @@ export function useSessionStream({
 
     // ---- Async initialization: load initial messages ----
     const loadInitialMessages = async (): Promise<void> => {
-      console.info('[useSessionStream] loadInitialMessages — sessionId=%s, worktreePath=%s, opcSessionId=%s, generation=%d', sessionId, worktreePath, opencodeSessionId, currentGeneration)
       try {
         let result = await window.opencodeOps.getMessages(worktreePath, opencodeSessionId)
-        console.info('[useSessionStream] getMessages result — success=%s, messageCount=%d, generation=%d (current=%d)', result.success, Array.isArray(result.messages) ? result.messages.length : 0, currentGeneration, generationRef.current)
         if (generationRef.current !== currentGeneration) {
-          console.info('[useSessionStream] stale generation after first getMessages, aborting')
           return
         }
 
@@ -592,14 +589,11 @@ export function useSessionStream({
           (!result.success || !result.messages || (result.messages as unknown[]).length === 0) &&
           generationRef.current === currentGeneration
         ) {
-          console.info('[useSessionStream] empty result, retrying in 800ms...')
           await new Promise((r) => setTimeout(r, 800))
           if (generationRef.current !== currentGeneration) {
-            console.info('[useSessionStream] stale generation after retry delay, aborting')
             return
           }
           result = await window.opencodeOps.getMessages(worktreePath, opencodeSessionId)
-          console.info('[useSessionStream] retry getMessages result — success=%s, messageCount=%d', result.success, Array.isArray(result.messages) ? result.messages.length : 0)
           if (generationRef.current !== currentGeneration) return
         }
 

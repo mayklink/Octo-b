@@ -565,7 +565,6 @@ function KanbanTicketModalContent({
       if (cancelled) return
       const dbId = dbSess?.opencode_session_id ?? null
       if (dbId && !dbId.startsWith('pending::')) {
-        console.info('[KanbanModal] resolved pending:: ID from DB — store=%s, db=%s', storeOpcSessionId, dbId)
         // Also update the Zustand store so other components pick it up
         useSessionStore.getState().setOpenCodeSessionId(ticket.current_session_id!, dbId)
         setResolvedOpcSessionId(dbId)
@@ -585,8 +584,6 @@ function KanbanTicketModalContent({
 
   const [sessionReady, setSessionReady] = useState(false)
 
-  console.info('[KanbanModal] session resolution — ticket.current_session_id=%s, worktreePath=%s, opcSessionId=%s (store=%s), hasSession=%s, sessionReady=%s, agent_sdk=%s, sessionLoadFailed=%s', ticket.current_session_id, worktreePath, opcSessionId, storeOpcSessionId, hasSession, sessionReady, effectiveSession?.agent_sdk, sessionLoadFailed)
-
   useEffect(() => {
     if (!worktreePath || !opcSessionId || !ticket.current_session_id) {
       setSessionReady(false)
@@ -602,11 +599,9 @@ function KanbanTicketModalContent({
     // from disk; for OpenCode sessions it pokes the server).  Without this,
     // SessionStreamPanel's useSessionStream hook may call getMessages() before
     // the cache is warm and receive an empty result.
-    console.info('[KanbanModal:sessionReady] starting — worktreePath=%s, opcSessionId=%s, octobSessionId=%s', worktreePath, opcSessionId, ticket.current_session_id)
     ;(async () => {
       try {
-        const reconnResult = await window.opencodeOps.reconnect(worktreePath, opcSessionId, ticket.current_session_id)
-        console.info('[KanbanModal:sessionReady] reconnect result:', reconnResult)
+        await window.opencodeOps.reconnect(worktreePath, opcSessionId, ticket.current_session_id)
       } catch (err) {
         console.warn('[KanbanModal:sessionReady] reconnect failed:', err)
         // reconnect failure is non-fatal — still try to show messages
@@ -615,18 +610,14 @@ function KanbanTicketModalContent({
       // Pre-warm: load messages into the backend cache so the next
       // getMessages() call from useSessionStream finds them immediately.
       try {
-        const warmResult = await window.opencodeOps.getMessages(worktreePath, opcSessionId)
-        console.info('[KanbanModal:sessionReady] pre-warm getMessages — success=%s, messageCount=%d', warmResult.success, Array.isArray(warmResult.messages) ? warmResult.messages.length : 0)
+        await window.opencodeOps.getMessages(worktreePath, opcSessionId)
       } catch (err) {
         console.warn('[KanbanModal:sessionReady] pre-warm getMessages failed:', err)
         // Pre-warm failure is non-fatal
       }
 
       if (!cancelled) {
-        console.info('[KanbanModal:sessionReady] setting sessionReady=true')
         setSessionReady(true)
-      } else {
-        console.info('[KanbanModal:sessionReady] cancelled, not setting sessionReady')
       }
     })()
 

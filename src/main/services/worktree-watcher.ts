@@ -144,48 +144,51 @@ export async function watchWorktree(worktreePath: string): Promise<void> {
   log.info('Starting worktree watcher', { worktreePath })
 
   const gitDir = resolveGitDir(worktreePath)
+  if (!gitDir) {
+    log.warn('Skipping worktree watcher — path is not a git repository', { worktreePath })
+    return
+  }
+
   let gitWatcher: chokidar.FSWatcher | null = null
 
-  if (gitDir) {
-    const commonGitDir = resolveCommonGitDir(gitDir)
+  const commonGitDir = resolveCommonGitDir(gitDir)
 
-    // Build list of .git paths to watch
-    const gitPaths: string[] = []
+  // Build list of .git paths to watch
+  const gitPaths: string[] = []
 
-    // Watch index file (in worktree-specific gitdir for linked worktrees)
-    const indexPath = join(gitDir, 'index')
-    if (existsSync(indexPath)) {
-      gitPaths.push(indexPath)
+  // Watch index file (in worktree-specific gitdir for linked worktrees)
+  const indexPath = join(gitDir, 'index')
+  if (existsSync(indexPath)) {
+    gitPaths.push(indexPath)
+  }
+
+  // Watch HEAD (worktree-specific HEAD for linked worktrees)
+  const headPath = join(gitDir, 'HEAD')
+  if (existsSync(headPath)) {
+    gitPaths.push(headPath)
+  }
+
+  // Watch refs directory (always in common git dir)
+  const refsPath = join(commonGitDir, 'refs')
+  if (existsSync(refsPath)) {
+    gitPaths.push(refsPath)
+  }
+
+  // Optionally watch MERGE_HEAD, REBASE_HEAD (in worktree gitdir)
+  for (const specialFile of ['MERGE_HEAD', 'REBASE_HEAD', 'CHERRY_PICK_HEAD']) {
+    const path = join(gitDir, specialFile)
+    if (existsSync(path)) {
+      gitPaths.push(path)
     }
+  }
 
-    // Watch HEAD (worktree-specific HEAD for linked worktrees)
-    const headPath = join(gitDir, 'HEAD')
-    if (existsSync(headPath)) {
-      gitPaths.push(headPath)
-    }
-
-    // Watch refs directory (always in common git dir)
-    const refsPath = join(commonGitDir, 'refs')
-    if (existsSync(refsPath)) {
-      gitPaths.push(refsPath)
-    }
-
-    // Optionally watch MERGE_HEAD, REBASE_HEAD (in worktree gitdir)
-    for (const specialFile of ['MERGE_HEAD', 'REBASE_HEAD', 'CHERRY_PICK_HEAD']) {
-      const path = join(gitDir, specialFile)
-      if (existsSync(path)) {
-        gitPaths.push(path)
-      }
-    }
-
-    if (gitPaths.length > 0) {
-      gitWatcher = chokidar.watch(gitPaths, {
-        persistent: true,
-        ignoreInitial: true,
-        // Don't use awaitWriteFinish for .git files - they're written atomically
-        depth: 3 // refs/heads/*, refs/tags/*, refs/remotes/*/*
-      })
-    }
+  if (gitPaths.length > 0) {
+    gitWatcher = chokidar.watch(gitPaths, {
+      persistent: true,
+      ignoreInitial: true,
+      // Don't use awaitWriteFinish for .git files - they're written atomically
+      depth: 3 // refs/heads/*, refs/tags/*, refs/remotes/*/*
+    })
   }
 
   // Working tree watcher (for file modifications before staging)
@@ -236,7 +239,7 @@ export async function watchWorktree(worktreePath: string): Promise<void> {
   log.info('Worktree watcher started', {
     worktreePath,
     hasGitWatcher: !!gitWatcher,
-    gitDir: gitDir || 'not found'
+    gitDir
   })
 }
 

@@ -25,6 +25,31 @@ interface GitBranchInfo {
   behind: number
 }
 
+function fileStatusesEqual(a: GitFileStatus[] | undefined, b: GitFileStatus[]): boolean {
+  if (!a || a.length !== b.length) return false
+  for (let i = 0; i < a.length; i++) {
+    const left = a[i]
+    const right = b[i]
+    if (
+      left.path !== right.path ||
+      left.relativePath !== right.relativePath ||
+      left.status !== right.status ||
+      left.staged !== right.staged
+    ) {
+      return false
+    }
+  }
+  return true
+}
+
+function branchInfoEqual(a: GitBranchInfo | undefined, b: GitBranchInfo): boolean {
+  return !!a &&
+    a.name === b.name &&
+    a.tracking === b.tracking &&
+    a.ahead === b.ahead &&
+    a.behind === b.behind
+}
+
 interface RemoteInfo {
   hasRemote: boolean
   isGitHub: boolean
@@ -172,7 +197,10 @@ export const useGitStore = create<GitStoreState>()((set, get) => ({
 
   // Load file statuses for a worktree
   loadFileStatuses: async (worktreePath: string) => {
-    set({ isLoading: true, error: null })
+    const hadCachedStatuses = get().fileStatusesByWorktree.has(worktreePath)
+    if (!hadCachedStatuses) {
+      set({ isLoading: true, error: null })
+    }
     try {
       const result = await window.gitOps.getFileStatuses(worktreePath)
       if (!result.success || !result.files) {
@@ -185,6 +213,16 @@ export const useGitStore = create<GitStoreState>()((set, get) => ({
 
       const files = result.files!
       const hasConflicts = files.some((f) => f.status === 'C')
+
+      const currentFiles = get().fileStatusesByWorktree.get(worktreePath)
+      const currentHasConflicts = get().conflictsByWorktree[worktreePath] ?? false
+      if (
+        hadCachedStatuses &&
+        fileStatusesEqual(currentFiles, files) &&
+        currentHasConflicts === hasConflicts
+      ) {
+        return
+      }
 
       set((state) => {
         const newMap = new Map(state.fileStatusesByWorktree)
@@ -211,6 +249,10 @@ export const useGitStore = create<GitStoreState>()((set, get) => ({
     try {
       const result = await window.gitOps.getBranchInfo(worktreePath)
       if (!result.success || !result.branch) {
+        return
+      }
+
+      if (branchInfoEqual(get().branchInfoByWorktree.get(worktreePath), result.branch)) {
         return
       }
 
