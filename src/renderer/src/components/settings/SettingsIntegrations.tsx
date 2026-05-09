@@ -84,6 +84,14 @@ function createSupabasePreset(): McpServerConfig {
   }
 }
 
+function createExcalidrawPreset(): McpServerConfig {
+  return {
+    ...createEmptyMcpServer(),
+    name: 'Excalidraw',
+    transport: 'stdio'
+  }
+}
+
 export function SettingsIntegrations(): React.JSX.Element {
   const { t } = useTranslation()
   const mcpServers = useSettingsStore((state) => state.mcpServers)
@@ -321,6 +329,14 @@ export function SettingsIntegrations(): React.JSX.Element {
             >
               <Server className="h-3.5 w-3.5 mr-1.5" />
               {t('settings.integrations.addSupabasePreset')}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => addMcpServer(createExcalidrawPreset())}
+            >
+              <Server className="h-3.5 w-3.5 mr-1.5" />
+              {t('settings.integrations.addExcalidrawPreset')}
             </Button>
             <Button variant="outline" size="sm" onClick={() => addMcpServer()}>
               <Plus className="h-3.5 w-3.5 mr-1.5" />

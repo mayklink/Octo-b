@@ -1,10 +1,12 @@
 import { create } from 'zustand'
 import type { OpenCodeMessage } from '@/components/sessions/SessionView'
+import { BOARD_ACTION_BLOCK_RE } from '@/lib/board-assistant-actions'
 import { parseBoardAssistantDraftSet } from '@/lib/board-assistant-drafts'
 import { useKanbanStore } from '@/stores/useKanbanStore'
 import type { SelectedModel } from '@/stores/useSettingsStore'
 import { useSettingsStore, resolveModelForSdk } from '@/stores/useSettingsStore'
 import { BOARD_ASSISTANT_SESSION_NAME_PREFIX } from '@/stores/useSessionStore'
+import type { KanbanTicket } from '../../../main/db/types'
 
 export type BoardChatStatus =
   | 'idle'
@@ -160,7 +162,7 @@ export function stripBoardAssistantScaffolding(content: string): string {
 }
 
 export function stripBoardDraftBlocks(content: string): string {
-  return content.replace(BOARD_DRAFT_BLOCK_RE, '').trim()
+  return content.replace(BOARD_DRAFT_BLOCK_RE, '').replace(BOARD_ACTION_BLOCK_RE, '').trim()
 }
 
 function normalizeVisibleContent(content: string, role: OpenCodeMessage['role']): string {
@@ -430,13 +432,25 @@ async function cleanupRuntime(sessionId: string | null, opencodeSessionId: strin
 }
 
 async function buildBoardContext(scope: BoardChatScope, selectedTargetProjectId: string | null): Promise<string> {
+  const formatTicket = (ticket: KanbanTicket): string => {
+    const flags = [
+      ticket.mode ? `mode=${ticket.mode}` : null,
+      ticket.plan_ready ? 'plan_ready' : null,
+      ticket.worktree_id ? `worktree=${ticket.worktree_id}` : null,
+      ticket.current_session_id ? `session=${ticket.current_session_id}` : null,
+      ticket.github_pr_number ? `pr=#${ticket.github_pr_number}` : null
+    ].filter(Boolean).join(', ')
+    const description = ticket.description ? ` — ${ticket.description.slice(0, 220)}` : ''
+    return `- [${ticket.column}] ${ticket.id} :: ${ticket.title}${flags ? ` (${flags})` : ''}${description}`
+  }
+
   if (scope.kind === 'project') {
     const tickets = await window.kanban.ticket.getByProject(scope.projectId, false)
     return [
       `Single-project board: ${scope.projectName}`,
       `Target project ID: ${scope.projectId}`,
       'Current tickets:',
-      ...tickets.slice(0, 50).map((ticket: KanbanTicket) => `- [${ticket.column}] ${ticket.title}`)
+      ...tickets.slice(0, 80).map((ticket: KanbanTicket) => formatTicket(ticket))
     ].join('\n')
   }
 
@@ -454,7 +468,7 @@ async function buildBoardContext(scope: BoardChatScope, selectedTargetProjectId:
       `Projects in scope: ${scope.availableProjects.map((project) => project.name).join(', ')}`,
       ...ticketGroups.flatMap(({ project, tickets }) => [
         `${project.name}:`,
-        ...tickets.slice(0, 20).map((ticket: KanbanTicket) => `- [${ticket.column}] ${ticket.title}`)
+        ...tickets.slice(0, 30).map((ticket: KanbanTicket) => formatTicket(ticket))
       ])
     ].join('\n')
   }
@@ -476,7 +490,10 @@ function buildAssistantPrompt(
   return [
     '<board-assistant-rules>',
     'You are Octob Board Assistant.',
-    'Purpose: converse in order to create local kanban tickets for the current board.',
+    'Purpose: help the user understand, validate, diagram, refine, and create local kanban tickets for the current board.',
+    'You can inspect the repository from the current working directory when the user asks whether a ticket makes sense according to code.',
+    'When analyzing existing tickets, use the board context and cite concrete ticket IDs/columns. When analyzing code, cite concrete files or commands when useful.',
+    'You can propose changes to existing tickets, but never apply or claim you applied them. The UI applies proposed changes only after explicit user approval.',
     'If you need clarification, ask one concise question and do not include draft tickets yet.',
     'When you are ready to propose tickets, include exactly one fenced code block labeled board-ticket-drafts.',
     'The block must contain strict JSON shaped like:',
@@ -492,7 +509,15 @@ function buildAssistantPrompt(
           'Use dependsOn to reference other drafts by draftKey when there is a dependency.'
         ]
       : []),
+    'When the user asks you to alter existing tasks, append exactly one fenced code block labeled board-ticket-actions.',
+    'The action block must contain strict JSON shaped like:',
+    '```board-ticket-actions',
+    '{"actions":[{"actionKey":"string","type":"create|update|move|archive","ticketId":"string|null","projectId":"string|null","title":"string","description":"string|null","column":"todo|in_progress|review|done","mode":"build|plan|super-plan|null","dependsOnTicketIds":["ticketId"],"reason":"string"}]}',
+    '```',
+    'For update actions, include only changed fields. For move actions, include ticketId and column. For archive actions, include ticketId. For create actions, include projectId and title.',
     'Keep draft tickets concrete and local-only.',
+    'When the user asks for a diagram in chat, generate a valid fenced ```mermaid block.',
+    'When the user asks for an editable Excalidraw/canvas/whiteboard diagram, use an enabled Excalidraw MCP server if available. If not configured, help produce an octob-mcp-draft and ask for missing command/url/auth details instead of inventing them.',
     '</board-assistant-rules>',
     '<board-assistant-context>',
     boardContext,

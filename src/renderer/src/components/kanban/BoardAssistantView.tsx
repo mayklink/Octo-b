@@ -1,8 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import {
+  Archive,
+  ArrowRight,
   Bot,
   CheckSquare,
+  ListChecks,
   Loader2,
+  Pencil,
   Send,
   Sparkles,
   Trash2
@@ -19,6 +23,11 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Textarea } from '@/components/ui/textarea'
 import { useSessionStream } from '@/hooks/useSessionStream'
+import {
+  BOARD_ACTION_BLOCK_RE,
+  parseBoardTicketActionSet,
+  type ParsedBoardTicketAction
+} from '@/lib/board-assistant-actions'
 import { parseBoardAssistantDraftSet } from '@/lib/board-assistant-drafts'
 import { coerceOpenCodeRenderableString } from '@/lib/opencode-transcript'
 import { toast } from '@/lib/toast'
@@ -37,6 +46,7 @@ import type { McpServerConfig } from '@shared/types/mcp'
 import type { StreamingPart } from '@/components/sessions/SessionView'
 import type { QuestionRequest } from '@/stores/useQuestionStore'
 import type { CommandApprovalRequest } from '@/stores/useCommandApprovalStore'
+import type { KanbanTicket, KanbanTicketColumn, KanbanTicketUpdate } from '../../../main/db/types'
 
 interface BoardAssistantViewProps {
   projectId: string
@@ -44,22 +54,35 @@ interface BoardAssistantViewProps {
 
 const BOARD_ASSISTANT_RULES = [
   'You are Octob Board Assistant.',
-  'Stay focused on helping the user create local kanban tickets for the current board scope.',
+  'Help the user understand, refine, validate, diagram, and create local kanban tickets for the current board scope.',
+  'You can discuss existing tickets, compare them with the repository code, identify missing detail, suggest implementation order, and propose new local tickets.',
+  'When the user asks whether a task makes sense according to the code, inspect the repository from the current working directory before answering. Cite concrete files, modules, or commands you used when useful.',
+  'Treat the board context as live product context: ticket IDs, columns, descriptions, modes, sessions, worktrees, and dependencies are meaningful.',
   'Do not claim tickets are created. The UI will create them only after explicit confirmation.',
+  'You can propose changes to existing tickets, but you must never imply they were applied. The UI applies proposed changes only after explicit user approval.',
   'If the user wants to create tasks but the request is vague, ask concise clarifying questions until you have enough information.',
   'Once you have enough information, propose draft tasks instead of creating them directly.',
   'When you are ready to propose tickets, append exactly one fenced code block tagged board-ticket-drafts.',
   'For project boards, the JSON schema is {"drafts":[{"draftKey":"string","title":"string","description":"string|null","projectId":"string","dependsOn":["draftKey"],"warnings":["string"]}]}.',
   'For other board scopes, the JSON schema is {"drafts":[{"title":"string","description":"string|null","warnings":["string"]}]}.',
   'When revising drafts, output a full replacement draft set in that code block.',
+  'When the user asks you to alter existing tasks, append exactly one fenced code block tagged board-ticket-actions.',
+  'The action JSON schema is {"actions":[{"actionKey":"string","type":"create|update|move|archive","ticketId":"string|null","projectId":"string|null","title":"string","description":"string|null","column":"todo|in_progress|review|done","mode":"build|plan|super-plan|null","dependsOnTicketIds":["ticketId"],"reason":"string"}]}.',
+  'For update actions, include only the fields that should change. For move actions, include ticketId and column. For archive actions, include ticketId. For create actions, include projectId, title, description, optional mode, and optional dependsOnTicketIds.',
+  'Keep actionKey values unique and stable within the proposal. Explain the changes in normal text before the hidden JSON block.',
   'Keep titles short, specific, and implementation-ready.',
+  'When the user asks for diagrams, prefer Mermaid when they want a text diagram in chat. Use fenced code blocks tagged mermaid.',
+  'Mermaid diagrams must be valid, concise, and directly reflect the current board/code analysis.',
+  'When the user asks for an editable visual diagram, Excalidraw, canvas, whiteboard, or sketch, use an enabled Excalidraw MCP server if one is configured and available to the selected agent.',
+  'If Excalidraw MCP is not configured, help the user configure it via an octob-mcp-draft block and ask only for missing command/url/auth details.',
   'If the user asks to configure/cadastrar an MCP, assist conversationally using the selected CLI agent.',
   'For MCP setup, ask for all required information: provider, transport, authentication mode, tokens/env vars when needed, project scope when relevant, and safety options like read-only.',
   'Do not save MCP settings yourself and do not claim they are saved.',
   'When MCP information is complete, append exactly one fenced code block tagged octob-mcp-draft.',
   'The MCP block must contain strict JSON shaped like {"name":"string","enabled":true,"transport":"stdio|http|sse","command":"string","args":"string","env":[{"name":"KEY","value":"VALUE"}],"url":"string","headers":[{"name":"Header","value":"Value"}]}.',
   'For Supabase remote MCP, prefer https://mcp.supabase.com/mcp with read_only=true and project_ref when available.',
-  'For Notion remote MCP, prefer https://mcp.notion.com/mcp with OAuth unless the user explicitly chooses token/manual mode.'
+  'For Notion remote MCP, prefer https://mcp.notion.com/mcp with OAuth unless the user explicitly chooses token/manual mode.',
+  'For Excalidraw MCP, do not invent package names, URLs, commands, or credentials. If the exact MCP server command or URL is unknown, ask the user for it or provide a draft with blank fields that the user can complete.'
 ].join('\n')
 
 function buildScopeKey(scope: BoardChatScope | null): string {
@@ -72,12 +95,17 @@ function buildScopeKey(scope: BoardChatScope | null): string {
 function sanitizeBoardMessageContent(message: BoardChatMessage): string {
   const withoutScaffolding = stripBoardAssistantScaffolding(message.content)
   if (message.role === 'assistant') {
-    const withoutDrafts = stripBoardDraftBlocks(withoutScaffolding).replace(MCP_DRAFT_BLOCK_RE, '').trim()
+    const withoutDrafts = stripBoardDraftBlocks(withoutScaffolding)
+      .replace(BOARD_ACTION_BLOCK_RE, '')
+      .replace(MCP_DRAFT_BLOCK_RE, '')
+      .trim()
     const parsedDrafts = parseBoardAssistantDraftSet(message.content)
+    const parsedActions = parseBoardTicketActionSet(message.content)
     const parsedMcpDraft = parseMcpDraftFromMessage(message)
     return (
       withoutDrafts ||
       (parsedDrafts ? 'Revisei as informações e preparei os rascunhos abaixo.' : '') ||
+      (parsedActions ? 'Revisei as informações e preparei as alterações abaixo.' : '') ||
       (parsedMcpDraft ? 'Revisei as informações e preparei o rascunho de MCP abaixo.' : '')
     )
   }
@@ -93,6 +121,7 @@ function sanitizeStreamingParts(parts: StreamingPart[] | undefined, role: BoardC
     const nextText =
       role === 'assistant'
         ? stripBoardDraftBlocks(stripBoardAssistantScaffolding(baseText))
+            .replace(BOARD_ACTION_BLOCK_RE, '')
             .replace(MCP_DRAFT_BLOCK_RE, '')
             .trim()
         : stripBoardAssistantScaffolding(baseText)
@@ -137,6 +166,22 @@ function truncateDescription(description: string | null | undefined): string | n
   return description.length > 240 ? `${description.slice(0, 237)}...` : description
 }
 
+function summarizeConfiguredMcpServers(): Array<{
+  name: string
+  enabled: boolean
+  transport: string
+  hasCommand: boolean
+  hasUrl: boolean
+}> {
+  return useSettingsStore.getState().mcpServers.map((server) => ({
+    name: server.name,
+    enabled: server.enabled,
+    transport: server.transport,
+    hasCommand: server.command.trim().length > 0,
+    hasUrl: server.url.trim().length > 0
+  }))
+}
+
 async function resolveProjectRuntime(projectId: string): Promise<{ worktreeId: string; path: string } | null> {
   const worktreeStore = useWorktreeStore.getState()
   const selectedWorktreeId = worktreeStore.selectedWorktreeId
@@ -162,15 +207,40 @@ function buildBoardPrompt(input: string, scope: BoardChatScope, targetProjectId:
   const projectStore = useProjectStore.getState()
   const kanbanStore = useKanbanStore.getState()
   const targetProject = projectStore.projects.find((project) => project.id === targetProjectId)
-  const visibleTickets = kanbanStore
+  const allVisibleTickets = kanbanStore
     .getTicketsForProject(targetProjectId)
     .filter((ticket) => !ticket.archived_at)
+  const visibleTickets = allVisibleTickets
     .map((ticket) => ({
+      id: ticket.id,
       title: ticket.title,
       description: truncateDescription(ticket.description),
-      column: ticket.column
+      column: ticket.column,
+      mode: ticket.mode,
+      planReady: ticket.plan_ready,
+      worktreeId: ticket.worktree_id,
+      currentSessionId: ticket.current_session_id,
+      githubPrNumber: ticket.github_pr_number,
+      githubPrUrl: ticket.github_pr_url
     }))
-    .slice(0, 80)
+    .slice(0, 120)
+
+  const visibleTicketIds = new Set(allVisibleTickets.map((ticket) => ticket.id))
+  const dependencies = Array.from(kanbanStore.dependencyMap.entries())
+    .filter(([dependentId]) => visibleTicketIds.has(dependentId))
+    .flatMap(([dependentId, blockerIds]) =>
+      Array.from(blockerIds)
+        .filter((blockerId) => visibleTicketIds.has(blockerId))
+        .map((blockerId) => ({
+          dependentId,
+          blockerId
+        }))
+    )
+
+  const ticketCountsByColumn = allVisibleTickets.reduce<Record<string, number>>((acc, ticket) => {
+    acc[ticket.column] = (acc[ticket.column] ?? 0) + 1
+    return acc
+  }, {})
 
   const context = {
     scope:
@@ -187,7 +257,14 @@ function buildBoardPrompt(input: string, scope: BoardChatScope, targetProjectId:
           description: targetProject.description
         }
       : { id: targetProjectId },
-    existingTickets: visibleTickets
+    existingTickets: visibleTickets,
+    ticketCountsByColumn,
+    dependencies,
+    configuredMcpServers: summarizeConfiguredMcpServers(),
+    diagramCapabilities: {
+      mermaid: 'Use fenced ```mermaid blocks for text diagrams in chat.',
+      excalidrawMcp: 'Use an enabled Excalidraw MCP server when available; otherwise propose an octob-mcp-draft configuration.'
+    }
   }
 
   return [
@@ -639,21 +716,146 @@ function BoardChatDraftProposalCard({
   )
 }
 
+function getColumnLabel(column: KanbanTicketColumn | undefined): string {
+  switch (column) {
+    case 'todo':
+      return 'To Do'
+    case 'in_progress':
+      return 'In Progress'
+    case 'review':
+      return 'Review'
+    case 'done':
+      return 'Done'
+    default:
+      return 'Sem coluna'
+  }
+}
+
+function getActionIcon(type: ParsedBoardTicketAction['type']): React.JSX.Element {
+  switch (type) {
+    case 'create':
+      return <Sparkles className="h-4 w-4" />
+    case 'update':
+      return <Pencil className="h-4 w-4" />
+    case 'move':
+      return <ArrowRight className="h-4 w-4" />
+    case 'archive':
+      return <Archive className="h-4 w-4" />
+  }
+}
+
+function getActionLabel(action: ParsedBoardTicketAction): string {
+  switch (action.type) {
+    case 'create':
+      return `Criar task "${action.title ?? 'sem titulo'}"`
+    case 'update':
+      return `Editar task ${action.ticketId ?? ''}`
+    case 'move':
+      return `Mover task ${action.ticketId ?? ''} para ${getColumnLabel(action.column)}`
+    case 'archive':
+      return `Arquivar task ${action.ticketId ?? ''}`
+  }
+}
+
+function BoardTicketActionProposalCard({
+  action,
+  ticket,
+  onToggle
+}: {
+  action: ParsedBoardTicketAction
+  ticket: KanbanTicket | null
+  onToggle: (actionId: string) => void
+}): React.JSX.Element {
+  const existingTitle = ticket?.title ?? action.ticketId ?? 'Nova task'
+
+  return (
+    <div className="rounded-2xl border border-border/70 bg-background/80 p-3 shadow-sm">
+      <div className="flex items-start gap-3">
+        <Checkbox
+          checked={action.selected || Boolean(action.appliedAt)}
+          onCheckedChange={() => onToggle(action.id)}
+          className="mt-1"
+          disabled={Boolean(action.appliedAt)}
+        />
+        <div className="min-w-0 flex-1 space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-primary">
+              {getActionIcon(action.type)}
+            </span>
+            <p className="text-sm font-semibold text-foreground">{getActionLabel(action)}</p>
+            {action.appliedAt && (
+              <span className="rounded-full border border-border/70 bg-muted/40 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                Aplicada
+              </span>
+            )}
+          </div>
+
+          {action.type !== 'create' && (
+            <p className="text-xs text-muted-foreground">
+              Atual: <span className="font-medium text-foreground">{existingTitle}</span>
+            </p>
+          )}
+
+          {action.title !== undefined && (
+            <p className="text-xs text-muted-foreground">
+              Título: <span className="font-medium text-foreground">{action.title}</span>
+            </p>
+          )}
+          {action.description !== undefined && (
+            <div className="rounded-xl border border-border/70 bg-muted/25 px-3 py-2 text-sm text-muted-foreground">
+              {action.description ? <MarkdownRenderer content={action.description} /> : 'Sem descrição'}
+            </div>
+          )}
+          {action.mode !== undefined && (
+            <p className="text-xs text-muted-foreground">
+              Modo: <span className="font-medium text-foreground">{action.mode ?? 'limpar'}</span>
+            </p>
+          )}
+          {action.dependsOnTicketIds.length > 0 && (
+            <p className="text-xs text-muted-foreground">
+              Depende de: {action.dependsOnTicketIds.join(', ')}
+            </p>
+          )}
+          {action.reason && (
+            <p className="text-xs text-muted-foreground">{action.reason}</p>
+          )}
+          {action.validationIssues.length > 0 && (
+            <div className="space-y-1 rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2">
+              {action.validationIssues.map((issue) => (
+                <p key={issue} className="text-xs text-destructive">
+                  {issue}
+                </p>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function BoardChatMessageList({
   messages,
   drafts,
   draftSourceMessageId,
+  ticketActions,
+  actionSourceMessageId,
+  ticketsById,
   streamingMessage,
   activeQuestion,
   activePermission,
   activeApproval,
   sessionId,
   onToggleDraft,
+  onToggleAction,
   onCreateAll,
   onCreateSelected,
+  onApplyActions,
   onRevise,
   onCancelDrafts,
+  onCancelActions,
   hasInvalidDrafts,
+  hasInvalidActions,
   onQuestionReply,
   onQuestionReject,
   onPermissionReply,
@@ -662,17 +864,24 @@ function BoardChatMessageList({
   messages: BoardChatMessage[]
   drafts: TicketDraft[]
   draftSourceMessageId: string | null
+  ticketActions: ParsedBoardTicketAction[]
+  actionSourceMessageId: string | null
+  ticketsById: Map<string, KanbanTicket>
   streamingMessage: BoardChatMessage | null
   activeQuestion: QuestionRequest | null
   activePermission: PermissionRequest | null
   activeApproval: CommandApprovalRequest | null
   sessionId: string | null
   onToggleDraft: (draftId: string) => void
+  onToggleAction: (actionId: string) => void
   onCreateAll: () => void
   onCreateSelected: () => void
+  onApplyActions: () => void
   onRevise: () => void
   onCancelDrafts: () => void
+  onCancelActions: () => void
   hasInvalidDrafts: boolean
+  hasInvalidActions: boolean
   onQuestionReply: (requestId: string, answers: QuestionAnswer[]) => void
   onQuestionReject: (requestId: string) => void
   onPermissionReply: (requestId: string, reply: 'once' | 'always' | 'reject', message?: string) => void
@@ -687,14 +896,17 @@ function BoardChatMessageList({
   const scrollRef = useRef<HTMLDivElement>(null)
   const selectedCount = drafts.filter((draft) => draft.selected).length
   const creatableSelectedCount = drafts.filter((draft) => draft.selected && !draft.createdAt).length
+  const selectedActionCount = ticketActions.filter((action) => action.selected).length
+  const actionableSelectedCount = ticketActions.filter((action) => action.selected && !action.appliedAt).length
   const dependencyCount = drafts.reduce((count, draft) => count + draft.dependsOn.length, 0)
   const invalidDraftCount = drafts.filter((draft) => draft.validationIssues.length > 0).length
+  const invalidActionCount = ticketActions.filter((action) => action.validationIssues.length > 0).length
 
   useEffect(() => {
     const element = scrollRef.current
     if (!element) return
     element.scrollTop = element.scrollHeight
-  }, [messages, drafts, draftSourceMessageId, streamingMessage, activeQuestion, activePermission, activeApproval])
+  }, [messages, drafts, draftSourceMessageId, ticketActions, actionSourceMessageId, streamingMessage, activeQuestion, activePermission, activeApproval])
 
   return (
     <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
@@ -711,6 +923,7 @@ function BoardChatMessageList({
         }
 
         const parsedDrafts = message.role === 'assistant' ? parseBoardAssistantDraftSet(message.content) : null
+        const parsedActions = message.role === 'assistant' ? parseBoardTicketActionSet(message.content) : null
         const sanitizedContent = sanitizeBoardMessageContent(message)
         const sanitizedParts = sanitizeStreamingParts(message.parts, message.role)
 
@@ -770,6 +983,54 @@ function BoardChatMessageList({
                     {hasInvalidDrafts
                       ? 'Corrija os rascunhos inválidos primeiro'
                       : `${creatableSelectedCount}/${selectedCount} prontas para criar`}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {message.id === actionSourceMessageId && ticketActions.length > 0 && parsedActions && (
+              <div className="space-y-3 rounded-3xl border border-border/70 bg-muted/20 p-3">
+                <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                  <ListChecks className="h-3.5 w-3.5" />
+                  Alterações propostas
+                </div>
+                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                  <span>{ticketActions.length} alteração{ticketActions.length === 1 ? '' : 'es'}</span>
+                  {invalidActionCount > 0 && (
+                    <span className="text-destructive">
+                      {invalidActionCount} inválida{invalidActionCount === 1 ? '' : 's'}
+                    </span>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  {ticketActions.map((action) => (
+                    <BoardTicketActionProposalCard
+                      key={action.id}
+                      action={action}
+                      ticket={action.ticketId ? ticketsById.get(action.ticketId) ?? null : null}
+                      onToggle={onToggleAction}
+                    />
+                  ))}
+                </div>
+                <div className="flex flex-wrap items-center gap-2 border-t border-border/70 pt-3">
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={onApplyActions}
+                    disabled={hasInvalidActions || actionableSelectedCount === 0}
+                  >
+                    Aplicar selecionadas
+                  </Button>
+                  <Button type="button" size="sm" variant="ghost" onClick={onRevise}>
+                    Revisar com IA
+                  </Button>
+                  <Button type="button" size="sm" variant="ghost" onClick={onCancelActions}>
+                    Cancelar
+                  </Button>
+                  <span className="ml-auto text-xs text-muted-foreground">
+                    {hasInvalidActions
+                      ? 'Corrija as alterações inválidas primeiro'
+                      : `${actionableSelectedCount}/${selectedActionCount} prontas para aplicar`}
                   </span>
                 </div>
               </div>
@@ -1023,6 +1284,8 @@ export function BoardAssistantView({ projectId }: BoardAssistantViewProps): Reac
 
   const composerFocusRef = useRef<HTMLTextAreaElement | null>(null)
   const [mcpDraft, setMcpDraft] = useState<McpServerConfig | null>(null)
+  const [ticketActions, setTicketActions] = useState<ParsedBoardTicketAction[]>([])
+  const [actionSourceMessageId, setActionSourceMessageId] = useState<string | null>(null)
   const availableAgentSdks = useSettingsStore((state) => state.availableAgentSdks)
   const defaultBoardAgentSdk = useSettingsStore((state) => resolveBoardChatAgentSdk(state.defaultAgentSdk))
   const effectiveAgentSdk = selectedAgentSdkOverride ?? defaultBoardAgentSdk
@@ -1158,6 +1421,21 @@ export function BoardAssistantView({ projectId }: BoardAssistantViewProps): Reac
     return null
   }, [messages])
 
+  const latestActionResult = useMemo(() => {
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      const message = messages[index]
+      if (message.role !== 'assistant') continue
+      const parsed = parseBoardTicketActionSet(message.content)
+      if (parsed) {
+        return {
+          messageId: message.id,
+          actions: parsed.actions
+        }
+      }
+    }
+    return null
+  }, [messages])
+
   useEffect(() => {
     if (!latestDraftResult || !scope) return
     if (draftSourceMessageId === latestDraftResult.messageId) return
@@ -1193,11 +1471,20 @@ export function BoardAssistantView({ projectId }: BoardAssistantViewProps): Reac
             project.id === (scope.kind === 'project' ? targetProjectId : (draft.projectId || targetProjectId))
           )?.name ??
           'Unknown project',
-        selected: true
+        selected: true,
+        createdAt: null
       })),
       latestDraftResult.messageId
     )
   }, [draftSourceMessageId, latestDraftResult, projects, scope, selectedTargetProjectId, setDrafts])
+
+  useEffect(() => {
+    if (!latestActionResult) return
+    if (actionSourceMessageId === latestActionResult.messageId) return
+
+    setTicketActions(latestActionResult.actions)
+    setActionSourceMessageId(latestActionResult.messageId)
+  }, [actionSourceMessageId, latestActionResult])
 
   useEffect(() => {
     if (!latestMcpDraftResult) return
@@ -1215,13 +1502,13 @@ export function BoardAssistantView({ projectId }: BoardAssistantViewProps): Reac
       return
     }
 
-    if (drafts.length > 0) {
+    if (drafts.length > 0 || ticketActions.length > 0) {
       setStatus('awaiting_confirmation')
       return
     }
 
     setStatus('idle')
-  }, [drafts.length, error, isStreaming, setStatus])
+  }, [drafts.length, error, isStreaming, setStatus, ticketActions.length])
 
   const activeQuestion = useQuestionStore((state) =>
     sessionId ? state.getActiveQuestion(sessionId) : null
@@ -1247,6 +1534,17 @@ export function BoardAssistantView({ projectId }: BoardAssistantViewProps): Reac
 
   const canInteract = scope !== null && scope.kind !== 'pinned'
   const hasInvalidDrafts = drafts.some((draft) => draft.validationIssues.length > 0)
+  const targetProjectTickets = useKanbanStore((state) =>
+    selectedTargetProjectId ? state.tickets.get(selectedTargetProjectId) ?? [] : []
+  )
+  const ticketsById = useMemo(() => {
+    const map = new Map<string, KanbanTicket>()
+    for (const ticket of targetProjectTickets) {
+      map.set(ticket.id, ticket)
+    }
+    return map
+  }, [targetProjectTickets])
+  const hasInvalidActions = ticketActions.some((action) => action.validationIssues.length > 0)
   const canSend =
     canInteract &&
     Boolean((scope?.kind === 'project' ? scope.projectId : selectedTargetProjectId) && composerValue.trim()) &&
@@ -1396,6 +1694,136 @@ export function BoardAssistantView({ projectId }: BoardAssistantViewProps): Reac
       toast.error(message)
     }
   }, [addLocalSystemMessage, drafts, markDraftsCreated, navigateToBoard])
+
+  const handleToggleAction = useCallback((actionId: string) => {
+    setTicketActions((current) =>
+      current.map((action) =>
+        action.id === actionId && !action.appliedAt
+          ? { ...action, selected: !action.selected }
+          : action
+      )
+    )
+  }, [])
+
+  const handleApplyTicketActions = useCallback(async () => {
+    const selectedActions = ticketActions.filter((action) => action.selected && !action.appliedAt)
+    if (selectedActions.length === 0) return
+
+    try {
+      const invalidActions = selectedActions.filter((action) => action.validationIssues.length > 0)
+      if (invalidActions.length > 0) {
+        throw new Error('Corrija as alterações inválidas antes de aplicar.')
+      }
+
+      const kanban = useKanbanStore.getState()
+      const createdTicketsByActionKey = new Map<string, KanbanTicket>()
+
+      for (const action of selectedActions) {
+        if (action.type === 'create') {
+          if (!action.projectId || !action.title) {
+            throw new Error('Uma ação de criação está incompleta.')
+          }
+
+          const createdTicket = await kanban.createTicket(action.projectId, {
+            project_id: action.projectId,
+            title: action.title,
+            description: action.description ?? null,
+            column: action.column ?? 'todo',
+            mode: action.mode ?? 'build'
+          })
+          createdTicketsByActionKey.set(action.actionKey, createdTicket)
+
+          for (const blockerId of action.dependsOnTicketIds) {
+            await window.kanban.dependency.add(createdTicket.id, blockerId)
+          }
+          continue
+        }
+
+        if (!action.ticketId) {
+          throw new Error('Uma ação não informa qual task deve alterar.')
+        }
+
+        const ticket =
+          ticketsById.get(action.ticketId) ??
+          await window.kanban.ticket.get(action.ticketId)
+
+        if (!ticket) {
+          throw new Error(`Task não encontrada: ${action.ticketId}`)
+        }
+
+        if (action.type === 'update') {
+          const update: KanbanTicketUpdate = {}
+          if (action.title !== undefined) update.title = action.title
+          if (action.description !== undefined) update.description = action.description
+          if (action.mode !== undefined) update.mode = action.mode
+          await kanban.updateTicket(ticket.id, ticket.project_id, update)
+          continue
+        }
+
+        if (action.type === 'move') {
+          if (!action.column) {
+            throw new Error(`Ação de mover sem coluna: ${action.actionKey}`)
+          }
+          const projectTickets = useKanbanStore.getState().tickets.get(ticket.project_id) ?? []
+          const nextSortOrder =
+            Math.max(
+              0,
+              ...projectTickets
+                .filter((candidate) => candidate.column === action.column)
+                .map((candidate) => candidate.sort_order)
+            ) + 1
+          await kanban.moveTicket(ticket.id, ticket.project_id, action.column, nextSortOrder)
+          continue
+        }
+
+        if (action.type === 'archive') {
+          await kanban.archiveTicket(ticket.id, ticket.project_id)
+        }
+      }
+
+      const touchedProjectIds = new Set(
+        selectedActions
+          .map((action) => action.projectId)
+          .filter((projectId): projectId is string => Boolean(projectId))
+      )
+      for (const action of selectedActions) {
+        if (action.ticketId) {
+          const ticket = ticketsById.get(action.ticketId) ?? await window.kanban.ticket.get(action.ticketId)
+          if (ticket?.project_id) touchedProjectIds.add(ticket.project_id)
+        }
+      }
+      for (const ticket of createdTicketsByActionKey.values()) {
+        touchedProjectIds.add(ticket.project_id)
+      }
+      for (const touchedProjectId of touchedProjectIds) {
+        await kanban.loadTickets(touchedProjectId)
+        await kanban.loadDependencies(touchedProjectId)
+      }
+
+      const appliedAt = new Date().toISOString()
+      setTicketActions((current) =>
+        current.map((action) =>
+          selectedActions.some((selected) => selected.id === action.id)
+            ? { ...action, appliedAt, selected: true }
+            : action
+        )
+      )
+      addLocalSystemMessage(
+        `Apliquei ${selectedActions.length} alteração${selectedActions.length === 1 ? '' : 'es'} no board.`
+      )
+      navigateToBoard()
+      toast.success(`Apliquei ${selectedActions.length} alteração${selectedActions.length === 1 ? '' : 'es'}.`)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Falha ao aplicar alterações.'
+      toast.error(message)
+    }
+  }, [addLocalSystemMessage, navigateToBoard, ticketActions, ticketsById])
+
+  const handleCancelActions = useCallback(() => {
+    setTicketActions([])
+    setActionSourceMessageId(null)
+    addLocalSystemMessage('Alterações propostas descartadas.')
+  }, [addLocalSystemMessage])
 
   const handleClear = useCallback(async () => {
     await handleDiscardConversation({ preserveOpen: true })
@@ -1557,21 +1985,30 @@ export function BoardAssistantView({ projectId }: BoardAssistantViewProps): Reac
         messages={messages}
         drafts={drafts}
         draftSourceMessageId={draftSourceMessageId}
+        ticketActions={ticketActions}
+        actionSourceMessageId={actionSourceMessageId}
+        ticketsById={ticketsById}
         streamingMessage={streamingMessage}
         activeQuestion={activeQuestion}
         activePermission={activePermission}
         activeApproval={activeApproval}
         sessionId={sessionId}
         onToggleDraft={toggleDraftSelected}
+        onToggleAction={handleToggleAction}
         onCreateAll={() => {
           void handleCreateDrafts(false)
         }}
         onCreateSelected={() => {
           void handleCreateDrafts(true)
         }}
+        onApplyActions={() => {
+          void handleApplyTicketActions()
+        }}
         onRevise={handleRevise}
         onCancelDrafts={handleCancelDrafts}
+        onCancelActions={handleCancelActions}
         hasInvalidDrafts={hasInvalidDrafts}
+        hasInvalidActions={hasInvalidActions}
         onQuestionReply={(requestId, answers) => {
           void handleQuestionReply(requestId, answers)
         }}
