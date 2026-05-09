@@ -1,7 +1,7 @@
-import { useState, useCallback, useRef, useLayoutEffect } from 'react'
+import { useState, useCallback, useRef, useLayoutEffect, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { motion } from 'motion/react'
-import { ChevronRight, ChevronDown, Plus, Zap, Archive } from 'lucide-react'
+import { ChevronRight, ChevronDown, Plus, Zap, Archive, CheckSquare, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from '@/lib/toast'
 import { lastSendMode } from '@/lib/message-send-times'
@@ -64,6 +64,8 @@ export function KanbanColumn({ column, tickets, archivedTickets, projectId, conn
     targetIndex: number
   } | null>(null)
   const [showArchiveAllConfirm, setShowArchiveAllConfirm] = useState(false)
+  const [selectionMode, setSelectionMode] = useState(false)
+  const [selectedTicketIds, setSelectedTicketIds] = useState<Set<string>>(() => new Set())
 
   // ── In Progress header title fit mode ───────────────────────────
   // 'centered'    = default; title centered with 50px left spacer
@@ -81,6 +83,8 @@ export function KanbanColumn({ column, tickets, archivedTickets, projectId, conn
   const isTodoColumn = column === 'todo'
   const isInProgressColumn = column === 'in_progress'
   const isMultiProjectMode = !!connectionId || !!isPinnedMode
+  const isBulkArchiveColumn = isTodoColumn || isDoneColumn
+  const selectedCount = selectedTicketIds.size
 
   // ── Multi-project helpers ─────────────────────────────────────────
   // In multi-project mode (connection or pinned), tickets come from different
@@ -211,6 +215,63 @@ export function KanbanColumn({ column, tickets, archivedTickets, projectId, conn
     },
     [projectId]
   )
+
+  useEffect(() => {
+    setSelectedTicketIds((prev) => {
+      const visibleIds = new Set(tickets.map((ticket) => ticket.id))
+      const next = new Set([...prev].filter((ticketId) => visibleIds.has(ticketId)))
+      return next.size === prev.size ? prev : next
+    })
+  }, [tickets])
+
+  useEffect(() => {
+    if (selectionMode && selectedTicketIds.size === 0) {
+      return
+    }
+    if (!selectionMode) {
+      setSelectedTicketIds(new Set())
+    }
+  }, [selectionMode, selectedTicketIds.size])
+
+  const handleToggleSelectionMode = useCallback(() => {
+    setSelectionMode((prev) => !prev)
+  }, [])
+
+  const handleSelectTicket = useCallback((ticketId: string, selected: boolean) => {
+    setSelectedTicketIds((prev) => {
+      const next = new Set(prev)
+      if (selected) {
+        next.add(ticketId)
+      } else {
+        next.delete(ticketId)
+      }
+      return next
+    })
+  }, [])
+
+  const handleSelectAllVisible = useCallback(() => {
+    setSelectedTicketIds(new Set(tickets.map((ticket) => ticket.id)))
+  }, [tickets])
+
+  const handleClearSelection = useCallback(() => {
+    setSelectedTicketIds(new Set())
+  }, [])
+
+  const handleArchiveSelected = useCallback(async () => {
+    const selected = tickets.filter((ticket) => selectedTicketIds.has(ticket.id))
+    if (selected.length === 0) return
+
+    try {
+      for (const ticket of selected) {
+        await useKanbanStore.getState().archiveTicket(ticket.id, ticket.project_id)
+      }
+      toast.success(`Archived ${selected.length} ticket${selected.length !== 1 ? 's' : ''}`)
+      setSelectedTicketIds(new Set())
+      setSelectionMode(false)
+    } catch {
+      toast.error('Failed to archive selected tickets')
+    }
+  }, [selectedTicketIds, tickets])
 
   const handleArchiveAll = useCallback(async () => {
     try {
@@ -615,6 +676,27 @@ export function KanbanColumn({ column, tickets, archivedTickets, projectId, conn
               </div>
             )}
 
+            {isBulkArchiveColumn && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    data-testid={`bulk-select-toggle-${column}`}
+                    onClick={handleToggleSelectionMode}
+                    className={cn(
+                      'ml-2 flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground',
+                      selectionMode && 'bg-primary/15 text-primary'
+                    )}
+                  >
+                    {selectionMode ? <X className="h-3.5 w-3.5" /> : <CheckSquare className="h-3.5 w-3.5" />}
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top" sideOffset={8}>
+                  {selectionMode ? 'Cancel selection' : 'Select tickets'}
+                </TooltipContent>
+              </Tooltip>
+            )}
+
             {/* Hidden measurement spans — inherit font styles via cascade; used
                 by useLayoutEffect to decide titleMode. Absolute-positioned off-screen. */}
             {isInProgressColumn && (
@@ -653,6 +735,40 @@ export function KanbanColumn({ column, tickets, archivedTickets, projectId, conn
           </ContextMenuContent>
         )}
       </ContextMenu>
+
+      {isBulkArchiveColumn && selectionMode && (
+        <div className="mb-2 flex items-center gap-1 rounded-md border border-border/40 bg-muted/20 px-2 py-1.5">
+          <span className="min-w-0 flex-1 text-xs text-muted-foreground">
+            {selectedCount} selected
+          </span>
+          <button
+            type="button"
+            onClick={handleSelectAllVisible}
+            disabled={tickets.length === 0 || selectedCount === tickets.length}
+            className="rounded px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:opacity-40"
+          >
+            All
+          </button>
+          <button
+            type="button"
+            onClick={handleArchiveSelected}
+            disabled={selectedCount === 0}
+            className="inline-flex items-center gap-1 rounded bg-primary/15 px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/25 disabled:opacity-40"
+          >
+            <Archive className="h-3 w-3" />
+            Archive
+          </button>
+          <button
+            type="button"
+            onClick={handleClearSelection}
+            disabled={selectedCount === 0}
+            className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:opacity-40"
+            aria-label="Clear selection"
+          >
+            <X className="h-3 w-3" />
+          </button>
+        </div>
+      )}
 
       {/* Drop area — scrollable card list, doubles as drop target */}
       {!(isDoneColumn && isCollapsed) && (
@@ -693,7 +809,15 @@ export function KanbanColumn({ column, tickets, archivedTickets, projectId, conn
                 >
                   {isDragOver && dropIndex === index && dropIndicator}
                   <div data-card-index={index} className={draggingTicketId === ticket.id ? 'h-0 min-h-0 overflow-hidden' : undefined}>
-                    <KanbanTicketCard ticket={ticket} index={index} connectionId={connectionId} isPinnedMode={isPinnedMode} />
+                    <KanbanTicketCard
+                      ticket={ticket}
+                      index={index}
+                      selectionMode={selectionMode && isBulkArchiveColumn}
+                      selected={selectedTicketIds.has(ticket.id)}
+                      onSelectedChange={handleSelectTicket}
+                      connectionId={connectionId}
+                      isPinnedMode={isPinnedMode}
+                    />
                   </div>
                 </motion.div>
               ))}

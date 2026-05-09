@@ -2,12 +2,15 @@ import { app } from 'electron'
 import { platform } from 'os'
 import { join } from 'path'
 import {
+  chmodSync,
   existsSync,
+  readdirSync,
   mkdirSync,
   rmSync,
   symlinkSync,
   lstatSync,
   unlinkSync,
+  rmdirSync,
   renameSync,
   writeFileSync
 } from 'fs'
@@ -39,9 +42,76 @@ export function createConnectionDir(name: string): string {
 }
 
 export function deleteConnectionDir(connectionPath: string): void {
+  if (!existsSync(connectionPath)) return
+
+  try {
+    rmSync(connectionPath, {
+      recursive: true,
+      force: true,
+      maxRetries: platform() === 'win32' ? 10 : 0,
+      retryDelay: 200
+    })
+  } catch (error) {
+    log.warn('Recursive connection directory delete failed, retrying entry-by-entry', {
+      path: connectionPath,
+      error: error instanceof Error ? error.message : String(error)
+    })
+    deleteConnectionDirEntryByEntry(connectionPath)
+  }
+
   if (existsSync(connectionPath)) {
-    rmSync(connectionPath, { recursive: true, force: true })
-    log.info('Deleted connection directory', { path: connectionPath })
+    throw new Error(`Failed to delete connection directory: ${connectionPath}`)
+  }
+
+  log.info('Deleted connection directory', { path: connectionPath })
+}
+
+function deleteConnectionDirEntryByEntry(connectionPath: string): void {
+  for (const entry of readdirSync(connectionPath)) {
+    const entryPath = join(connectionPath, entry)
+    try {
+      const stat = lstatSync(entryPath)
+      if (stat.isSymbolicLink()) {
+        try {
+          unlinkSync(entryPath)
+        } catch (error) {
+          if (platform() === 'win32') {
+            rmdirSync(entryPath)
+          } else {
+            throw error
+          }
+        }
+      } else {
+        rmSync(entryPath, {
+          recursive: true,
+          force: true,
+          maxRetries: platform() === 'win32' ? 10 : 0,
+          retryDelay: 200
+        })
+      }
+    } catch (error) {
+      if (platform() === 'win32') {
+        try {
+          chmodSync(entryPath, 0o666)
+          rmSync(entryPath, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 })
+          continue
+        } catch {
+          // Surface the original error below.
+        }
+      }
+      throw error
+    }
+  }
+
+  try {
+    rmdirSync(connectionPath)
+  } catch (error) {
+    if (platform() === 'win32') {
+      chmodSync(connectionPath, 0o777)
+      rmdirSync(connectionPath)
+      return
+    }
+    throw error
   }
 }
 

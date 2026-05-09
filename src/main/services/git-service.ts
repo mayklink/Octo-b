@@ -28,6 +28,14 @@ import { normalizeWorktreePath } from './path-utils'
 const execFileAsync = promisify(execFile)
 const log = createLogger({ component: 'GitService' })
 
+function isNotGitRepositoryMessage(message: string): boolean {
+  return /not a git repository/i.test(message)
+}
+
+function hasGitMetadata(repoPath: string): boolean {
+  return existsSync(join(repoPath, '.git'))
+}
+
 /** Windows: EPERM during recursive delete is common while editors/AV briefly lock files. */
 async function removeFilesystemTreeAggressive(worktreePath: string): Promise<void> {
   if (!existsSync(worktreePath)) return
@@ -386,6 +394,13 @@ export class GitService {
    */
   async listWorktrees(): Promise<WorktreeInfo[]> {
     try {
+      if (!hasGitMetadata(this.repoPath)) {
+        log.warn('Skipping worktree list because path has no .git metadata', {
+          repoPath: this.repoPath
+        })
+        return []
+      }
+
       const result = await this.git.raw(['worktree', 'list', '--porcelain'])
       const worktrees: WorktreeInfo[] = []
       const normalizedRepoPath = normalizeWorktreePath(this.repoPath)
@@ -419,11 +434,18 @@ export class GitService {
 
       return worktrees
     } catch (error) {
-      log.error(
-        'Failed to list worktrees',
-        error instanceof Error ? error : new Error(String(error)),
-        { repoPath: this.repoPath }
-      )
+      const message = error instanceof Error ? error.message : String(error)
+      if (isNotGitRepositoryMessage(message)) {
+        log.warn('Skipping worktree list because path is not a git repository', {
+          repoPath: this.repoPath
+        })
+      } else {
+        log.error(
+          'Failed to list worktrees',
+          error instanceof Error ? error : new Error(message),
+          { repoPath: this.repoPath }
+        )
+      }
       return []
     }
   }
@@ -632,13 +654,27 @@ export class GitService {
    */
   async pruneWorktrees(): Promise<void> {
     try {
+      if (!hasGitMetadata(this.repoPath)) {
+        log.warn('Skipping worktree prune because path has no .git metadata', {
+          repoPath: this.repoPath
+        })
+        return
+      }
+
       await this.git.raw(['worktree', 'prune'])
     } catch (error) {
-      log.error(
-        'Failed to prune worktrees',
-        error instanceof Error ? error : new Error(String(error)),
-        { repoPath: this.repoPath }
-      )
+      const message = error instanceof Error ? error.message : String(error)
+      if (isNotGitRepositoryMessage(message)) {
+        log.warn('Skipping worktree prune because path is not a git repository', {
+          repoPath: this.repoPath
+        })
+      } else {
+        log.error(
+          'Failed to prune worktrees',
+          error instanceof Error ? error : new Error(message),
+          { repoPath: this.repoPath }
+        )
+      }
     }
   }
 
@@ -708,11 +744,16 @@ export class GitService {
       return { success: true, files }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error'
-      log.error(
-        'Failed to get file statuses',
-        error instanceof Error ? error : new Error(message),
-        { repoPath: this.repoPath }
-      )
+      if (isNotGitRepositoryMessage(message)) {
+        log.warn('Skipping file statuses because path is not a git repository', {
+          repoPath: this.repoPath
+        })
+        return { success: true, files: [] }
+      }
+
+      log.error('Failed to get file statuses', error instanceof Error ? error : new Error(message), {
+        repoPath: this.repoPath
+      })
       return { success: false, error: message }
     }
   }
@@ -812,7 +853,7 @@ export class GitService {
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error'
-      const orphanPath = /not a git repository/i.test(message)
+      const orphanPath = isNotGitRepositoryMessage(message)
       if (orphanPath) {
         log.warn('Skipping branch info — path is not a git repository (orphan folder?)', {
           repoPath: this.repoPath
