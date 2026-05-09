@@ -10,7 +10,8 @@ files:
 publish:
   provider: github
   owner: mayklink
-  repo: octob
+  repo: Octo-b
+  private: true
   releaseType: release
 
 # Native .node binaries cannot be loaded from inside an ASAR archive.

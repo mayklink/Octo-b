@@ -1,8 +1,11 @@
 import { app, BrowserWindow, ipcMain } from 'electron'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { autoUpdater, type UpdateInfo } from 'electron-updater'
 import { createLogger } from './logger'
 
 const log = createLogger({ component: 'UpdateService' })
+const HARDCODED_GITHUB_UPDATE_TOKEN = 'REPLACE_WITH_GITHUB_TOKEN'
 
 type UpdateStatus =
   | 'idle'
@@ -28,6 +31,71 @@ let currentState: UpdateState = {
   version: null,
   error: null,
   percent: null
+}
+
+function normalizeFeedUrl(value: string | undefined): string | null {
+  const trimmed = value?.trim()
+  if (!trimmed) return null
+  try {
+    const url = new URL(trimmed)
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') return null
+    return trimmed.replace(/\/+$/, '')
+  } catch {
+    return null
+  }
+}
+
+function readLocalGithubToken(): string | null {
+  const envToken = process.env.OCTOB_GITHUB_TOKEN?.trim() || process.env.GH_TOKEN?.trim()
+  if (envToken) return envToken
+
+  const hardcodedToken = HARDCODED_GITHUB_UPDATE_TOKEN.trim()
+  if (hardcodedToken && hardcodedToken !== 'REPLACE_WITH_GITHUB_TOKEN') {
+    return hardcodedToken
+  }
+
+  try {
+    const tokenPath = join(app.getPath('userData'), 'github-update-token.txt')
+    const token = readFileSync(tokenPath, 'utf8').trim()
+    return token || null
+  } catch {
+    return null
+  }
+}
+
+function configureUpdateFeed(): void {
+  const feedUrl = normalizeFeedUrl(process.env.OCTOB_UPDATE_URL)
+  const githubToken = readLocalGithubToken()
+
+  if (githubToken) {
+    autoUpdater.addAuthHeader(`token ${githubToken}`)
+    log.info('Using authenticated GitHub update feed')
+  }
+
+  if (!feedUrl) return
+
+  autoUpdater.setFeedURL({
+    provider: 'generic',
+    url: feedUrl
+  })
+  log.info('Using generic update feed', { feedUrl })
+}
+
+function toUserUpdateError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error)
+  const statusCode = typeof error === 'object' && error !== null && 'statusCode' in error
+    ? Number((error as { statusCode?: unknown }).statusCode)
+    : null
+
+  if (statusCode === 404 || /\b404\b/.test(message)) {
+    return 'Canal de atualização não encontrado. Configure/publice o endpoint de updates antes de habilitar a busca automática.'
+  }
+
+  if (/authentication token|private|unauthorized|forbidden|401|403/i.test(message)) {
+    return 'Não foi possível acessar o canal de atualização. Verifique autenticação/permissões ou use um endpoint público de updates.'
+  }
+
+  return message.length > 260 ? `${message.slice(0, 257)}...` : message
 }
 
 function emit(channel: string, payload?: unknown): void {
@@ -64,8 +132,11 @@ async function checkForUpdates(): Promise<UpdateState> {
     await autoUpdater.checkForUpdates()
     return currentState
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    log.warn('Update check failed', { error: message })
+    const message = toUserUpdateError(error)
+    log.warn('Update check failed', {
+      error: error instanceof Error ? error.message : String(error),
+      userMessage: message
+    })
     return setState({ status: 'error', error: message, percent: null })
   } finally {
     checking = false
@@ -80,6 +151,7 @@ export function registerUpdateService(window: BrowserWindow): void {
 
     autoUpdater.autoDownload = false
     autoUpdater.autoInstallOnAppQuit = true
+    configureUpdateFeed()
 
     autoUpdater.on('checking-for-update', () => {
       log.info('Checking for updates')
@@ -117,8 +189,11 @@ export function registerUpdateService(window: BrowserWindow): void {
     })
 
     autoUpdater.on('error', (error) => {
-      const message = error instanceof Error ? error.message : String(error)
-      log.warn('Updater error', { error: message })
+      const message = toUserUpdateError(error)
+      log.warn('Updater error', {
+        error: error instanceof Error ? error.message : String(error),
+        userMessage: message
+      })
       setState({ status: 'error', error: message, percent: null })
       emit('updates:error', { message })
     })
