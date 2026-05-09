@@ -31,6 +31,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { WorktreePickerModal } from '@/components/kanban/WorktreePickerModal'
 import { Popover, PopoverAnchor } from '@/components/ui/popover'
+import { Checkbox } from '@/components/ui/checkbox'
 import { AttachPRPopover } from '@/components/kanban/AttachPRPopover'
 import { useGitStore } from '@/stores/useGitStore'
 import { IndeterminateProgressBar } from '@/components/sessions/IndeterminateProgressBar'
@@ -79,6 +80,9 @@ interface KanbanTicketCardProps {
   index?: number
   /** Whether this ticket is archived (shown in archived section) */
   isArchived?: boolean
+  selectionMode?: boolean
+  selected?: boolean
+  onSelectedChange?: (ticketId: string, selected: boolean) => void
   /** When viewing a connection board, the connection ID for project tag + jump-to-session */
   connectionId?: string
   /** When viewing the pinned board (multi-project), show project tags */
@@ -89,6 +93,9 @@ export const KanbanTicketCard = memo(function KanbanTicketCard({
   ticket,
   index = 0,
   isArchived = false,
+  selectionMode = false,
+  selected = false,
+  onSelectedChange,
   connectionId,
   isPinnedMode
 }: KanbanTicketCardProps) {
@@ -420,6 +427,12 @@ export const KanbanTicketCard = memo(function KanbanTicketCard({
   // ── Click handler — open ticket detail modal ───────────────────
   const handleClick = useCallback(
     (e: React.MouseEvent) => {
+      if (selectionMode && !isArchived) {
+        e.preventDefault()
+        onSelectedChange?.(ticket.id, !selected)
+        return
+      }
+
       // In dependency mode, don't open the modal — let click bubble
       // to the board's handleBoardClick which toggles the dependency
       if (useKanbanStore.getState().dependencyMode?.active) return
@@ -436,7 +449,16 @@ export const KanbanTicketCard = memo(function KanbanTicketCard({
 
       useKanbanStore.getState().setSelectedTicketId(ticket.id)
     },
-    [ticket.id, ticket.worktree_id, ticket.project_id, isArchived, isPinnedMode]
+    [
+      ticket.id,
+      ticket.worktree_id,
+      ticket.project_id,
+      isArchived,
+      isPinnedMode,
+      selectionMode,
+      selected,
+      onSelectedChange
+    ]
   )
 
   // ── Middle-click — select attached worktree (same as sidebar) ─
@@ -608,6 +630,8 @@ export const KanbanTicketCard = memo(function KanbanTicketCard({
                   'group cursor-pointer rounded-md border bg-card shadow-sm p-2 transition-all duration-200',
                   'hover:bg-muted/40',
                   isDragging && 'invisible',
+                  selectionMode && !isArchived && 'pl-2',
+                  selected && 'ring-1 ring-primary/60 border-primary/70 bg-primary/[0.04]',
                   isArchived && 'opacity-50 cursor-default',
                   isBlocked && 'opacity-60',
                   // Highlighted as a blocker of the currently hovered ticket
@@ -624,7 +648,18 @@ export const KanbanTicketCard = memo(function KanbanTicketCard({
               >
             {/* Title + top-right indicators */}
             <div className="flex items-start justify-between gap-2">
-              <p className="text-sm font-medium leading-snug text-foreground min-w-0 flex-1 break-words">{ticket.title}</p>
+              <div className="flex min-w-0 flex-1 items-start gap-2">
+                {selectionMode && !isArchived && (
+                  <Checkbox
+                    checked={selected}
+                    aria-label={`Select ${ticket.title}`}
+                    className="mt-0.5"
+                    onClick={(e) => e.stopPropagation()}
+                    onCheckedChange={(checked) => onSelectedChange?.(ticket.id, checked)}
+                  />
+                )}
+                <p className="text-sm font-medium leading-snug text-foreground min-w-0 flex-1 break-words">{ticket.title}</p>
+              </div>
               <div className="flex items-center gap-1.5 shrink-0">
                 {tokenText && (
                   <span className="text-[11px] tabular-nums text-muted-foreground">
