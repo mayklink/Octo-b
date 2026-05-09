@@ -344,6 +344,7 @@ export const settings = {
     addMcp: 'Add MCP',
     addNotionPreset: 'Notion preset',
     addSupabasePreset: 'Supabase preset',
+    addExcalidrawPreset: 'Excalidraw preset',
     testMcp: 'Test',
     noMcpServers: 'No MCP servers registered.',
     enabled: 'Enabled',
@@ -365,6 +366,6 @@ export const settings = {
     headersPlaceholder: 'Authorization=Bearer your_token',
     removeMcp: 'Remove MCP',
     mcpSupportHint:
-      'Only enabled servers are sent to new sessions/tasks for compatible ACP agents, such as Cursor CLI and Mistral Vibe. Remote MCPs such as Notion and Supabase use OAuth when the agent requests authentication.'
+      'Only enabled servers are sent to new sessions/tasks for compatible agents, including Codex, Claude Code, Cursor CLI, and Mistral Vibe. Remote MCPs such as Notion and Supabase use OAuth when the agent requests authentication.'
   }
 }
