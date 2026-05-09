@@ -1,17 +1,9 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useGitStore } from '@/stores/useGitStore'
 import { useWorktreeStore } from '@/stores/useWorktreeStore'
-import { useSessionStore } from '@/stores/useSessionStore'
 import { useProjectStore } from '@/stores/useProjectStore'
-import { useWorktreeStatusStore } from '@/stores/useWorktreeStatusStore'
 import { toast } from '@/lib/toast'
-import {
-  DEFAULT_REVIEW_PROMPT_PRESET_ID,
-  resolveReviewPromptTemplateBody
-} from '@/constants/reviewPrompts'
-import { useSettingsStore, resolveModelForSdk } from '@/stores/useSettingsStore'
-import { messageSendTimes, userExplicitSendTimes, lastSendMode } from '@/lib/message-send-times'
-import { snapshotTokenBaseline } from '@/lib/token-baselines'
+import { startCodeReviewSession } from '@/lib/code-review'
 
 interface AttachedPR {
   number: number
@@ -190,72 +182,13 @@ export function useLifecycleActions(worktreeId: string | null): LifecycleActions
       return null
     }
 
-    const currentBranchInfo = useGitStore.getState().branchInfoByWorktree.get(worktree.path)
-    const currentReviewTarget = useGitStore.getState().reviewTargetBranch.get(worktreeId)
-    const target = targetBranch || currentReviewTarget || currentBranchInfo?.tracking || 'origin/main'
-    const branchName = currentBranchInfo?.name || 'unknown'
-
-    const settings = useSettingsStore.getState()
-    const presetId = settings.reviewPromptPresetId?.trim() || DEFAULT_REVIEW_PROMPT_PRESET_ID
-    const reviewTemplate = resolveReviewPromptTemplateBody(presetId, settings.codeReviewPromptTemplates ?? [])
-
-    const prompt = [
-      reviewTemplate,
-      '',
-      '---',
-      '',
-      `Compare the current branch (${branchName}) against ${target}.`,
-      `Use \`git diff ${target}...HEAD\` to see all changes.`
-    ].join('\n')
-
-    const sessionStore = useSessionStore.getState()
-    const result = await sessionStore.createSession(worktreeId, projectId, undefined, undefined, { autoFocus: false })
-    if (!result.success || !result.session) {
-      toast.error('Failed to create review session')
-      return null
-    }
-
-    await sessionStore.updateSessionName(
-      result.session.id,
-      `Code Review — ${branchName} vs ${target}`
-    )
-    // Register the review session so ticket cards can show "Reviewing" indicator
-    useWorktreeStatusStore.getState().setReviewSession(worktreeId, result.session.id)
-
-    // Fire-and-forget: eagerly connect and send the review prompt in the background
-    // so it starts without waiting for SessionView to mount.
-    const sessionId = result.session.id
-    const worktreePath = worktree.path
-    const agentSdk = result.session.agent_sdk
-    const sessionModel = result.session.model_provider_id && result.session.model_id
-      ? { providerID: result.session.model_provider_id, modelID: result.session.model_id, variant: result.session.model_variant ?? undefined }
-      : resolveModelForSdk(agentSdk || 'opencode') ?? undefined
-
-    void (async () => {
-      try {
-        const connectResult = await window.opencodeOps.connect(worktreePath, sessionId)
-        if (connectResult.success && connectResult.sessionId) {
-          sessionStore.setOpenCodeSessionId(sessionId, connectResult.sessionId)
-          window.db.session.update(sessionId, { opencode_session_id: connectResult.sessionId }).catch(() => {})
-
-          messageSendTimes.set(sessionId, Date.now())
-          userExplicitSendTimes.set(sessionId, Date.now())
-          snapshotTokenBaseline(sessionId)
-          lastSendMode.set(sessionId, 'build')
-          useWorktreeStatusStore.getState().setSessionStatus(sessionId, 'working')
-
-          await window.opencodeOps.prompt(worktreePath, connectResult.sessionId, [
-            { type: 'text', text: prompt }
-          ], sessionModel)
-        } else {
-          sessionStore.setPendingMessage(sessionId, prompt)
-        }
-      } catch {
-        sessionStore.setPendingMessage(sessionId, prompt)
-      }
-    })()
-
-    return result.session.id
+    return startCodeReviewSession({
+      worktreeId,
+      projectId,
+      worktreePath: worktree.path,
+      targetBranch,
+      manual: true
+    })
   }, [worktreeId, worktree?.path])
 
   const mergePR = useCallback(async (): Promise<boolean> => {

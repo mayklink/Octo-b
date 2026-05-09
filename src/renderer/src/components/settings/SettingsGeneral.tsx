@@ -21,6 +21,7 @@ export function SettingsGeneral(): React.JSX.Element {
     autoPullBeforeWorktree,
     boardMode,
     followUpTriggerColumn,
+    autoCodeReviewEnabled,
     vimModeEnabled,
     keepAwakeEnabled,
     mergeConflictMode,
@@ -183,6 +184,31 @@ export function SettingsGeneral(): React.JSX.Element {
             {t('settings.general.boardStickyTab')}
           </button>
         </div>
+      </div>
+
+      {/* Automatic code review */}
+      <div className="flex items-center justify-between">
+        <div>
+          <label className="text-sm font-medium">{t('settings.general.autoCodeReview')}</label>
+          <p className="text-xs text-muted-foreground">{t('settings.general.autoCodeReviewHint')}</p>
+        </div>
+        <button
+          role="switch"
+          aria-checked={autoCodeReviewEnabled}
+          onClick={() => updateSetting('autoCodeReviewEnabled', !autoCodeReviewEnabled)}
+          className={cn(
+            'relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors',
+            autoCodeReviewEnabled ? 'bg-primary' : 'bg-muted'
+          )}
+          data-testid="auto-code-review-toggle"
+        >
+          <span
+            className={cn(
+              'pointer-events-none block h-4 w-4 rounded-full bg-background shadow-lg ring-0 transition-transform',
+              autoCodeReviewEnabled ? 'translate-x-4' : 'translate-x-0'
+            )}
+          />
+        </button>
       </div>
 
       {/* Follow-up ticket trigger */}

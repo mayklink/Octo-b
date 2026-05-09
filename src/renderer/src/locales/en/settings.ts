@@ -41,6 +41,9 @@ export const settings = {
     boardModeHint: 'Choose how the Kanban board is accessed.',
     boardToggle: 'Toggle',
     boardStickyTab: 'Sticky Tab',
+    autoCodeReview: 'Automatic code review',
+    autoCodeReviewHint:
+      'Start a code review automatically when a build session finishes and moves to Review.',
     followUpTrigger: 'Follow-up Ticket Trigger',
     followUpTriggerHint:
       'When should blocked tickets auto-launch? When all blockers reach this column.',

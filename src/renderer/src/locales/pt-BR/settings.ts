@@ -42,6 +42,9 @@ export const settings = {
     boardModeHint: 'Como o quadro Kanban é acessado.',
     boardToggle: 'Alternar',
     boardStickyTab: 'Aba fixa',
+    autoCodeReview: 'Code review automático',
+    autoCodeReviewHint:
+      'Iniciar code review automaticamente quando uma sessão de build terminar e for para Revisão.',
     followUpTrigger: 'Gatilho de ticket de acompanhamento',
     followUpTriggerHint:
       'Quando tickets bloqueados devem abrir automaticamente? Quando todos os bloqueadores chegarem nesta coluna.',
