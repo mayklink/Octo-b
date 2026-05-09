@@ -1359,15 +1359,6 @@ export function SessionView({ sessionId }: SessionViewProps): React.JSX.Element 
           (p) => p.type === 'tool_use' && p.toolUse?.id === toolId
         )
 
-        console.debug('[TOOL_DEBUG] upsertToolUse', {
-          toolId,
-          isNew: existingIndex < 0,
-          existingName: existingIndex >= 0 ? parts[existingIndex].toolUse?.name : undefined,
-          updateName: update.name,
-          updateStatus: update.status,
-          hasOutput: !!update.output
-        })
-
         if (existingIndex >= 0) {
           // Update existing — preserve name if update doesn't provide one
           const existing = parts[existingIndex]
@@ -1652,37 +1643,8 @@ export function SessionView({ sessionId }: SessionViewProps): React.JSX.Element 
       }
       const streamedContentSnapshot = streamingContentRef.current
 
-      console.debug('[TOOL_DEBUG] finalizeResponse START', {
-        streamingPartsCount: streamingPartsRef.current.length,
-        toolParts: streamingPartsRef.current
-          .filter((p) => p.type === 'tool_use')
-          .map((p) => ({
-            id: p.toolUse?.id,
-            name: p.toolUse?.name,
-            status: p.toolUse?.status,
-            hasOutput: !!p.toolUse?.output
-          }))
-      })
-
       try {
         const refreshedMessages = await loadMessages(undefined, { preferDurableCodex: true })
-
-        console.debug('[TOOL_DEBUG] finalizeResponse LOADED', {
-          loadedCount: refreshedMessages.length,
-          roles: refreshedMessages.map((m) => m.role),
-          toolInfo: refreshedMessages
-            .filter((m) => m.role === 'assistant')
-            .flatMap((m) =>
-              (m.parts ?? [])
-                .filter((p) => p.type === 'tool_use')
-                .map((p) => ({
-                  id: p.toolUse?.id,
-                  name: p.toolUse?.name,
-                  status: p.toolUse?.status,
-                  hasOutput: !!p.toolUse?.output
-                }))
-            )
-        })
 
         if (
           !isCodexSession &&
@@ -1725,7 +1687,6 @@ export function SessionView({ sessionId }: SessionViewProps): React.JSX.Element 
       } finally {
         resetStreamingState()
         setIsSending(false)
-        console.debug('[TOOL_DEBUG] finalizeResponse DONE — streaming state cleared')
       }
     }
 
@@ -1765,16 +1726,6 @@ export function SessionView({ sessionId }: SessionViewProps): React.JSX.Element 
     // (not yet set up) and the global listener (which skips the active session).
     const unsubscribe = window.opencodeOps?.onStream
       ? window.opencodeOps.onStream((event) => {
-          // Debug: log ALL session.updated events, even if filtered out
-          if (event.type === 'session.updated') {
-            console.log('[TITLE_DEBUG] onStream received session.updated (before filter)', {
-              eventSessionId: event.sessionId,
-              componentSessionId: sessionId,
-              match: event.sessionId === sessionId,
-              title: event.data?.info?.title || event.data?.title
-            })
-          }
-
           // Only handle events for this session
           if (event.sessionId !== sessionId) return
 
@@ -1833,27 +1784,12 @@ export function SessionView({ sessionId }: SessionViewProps): React.JSX.Element 
           if (event.type === 'session.updated') {
             const rawTitle = event.data?.info?.title || event.data?.title
             const sessionTitle = rawTitle ? maybeExtractJsonTitle(rawTitle) : rawTitle
-            console.log('[TITLE_DEBUG] SessionView received session.updated', {
-              eventSessionId: event.sessionId,
-              componentSessionId: sessionId,
-              sessionTitle,
-              eventData: event.data
-            })
             // Skip OpenCode default placeholder titles like "New session - 2026-02-12T21:33:03.013Z"
             const isOpenCodeDefault = /^New session\s*-?\s*\d{4}-\d{2}-\d{2}/i.test(
               sessionTitle || ''
             )
             if (sessionTitle && !isOpenCodeDefault) {
-              console.log('[TITLE_DEBUG] SessionView calling updateSessionName', {
-                sessionId,
-                sessionTitle
-              })
               useSessionStore.getState().updateSessionName(sessionId, sessionTitle)
-            } else {
-              console.log('[TITLE_DEBUG] SessionView SKIPPED updateSessionName', {
-                sessionTitle,
-                isOpenCodeDefault
-              })
             }
             return
           }
@@ -2514,15 +2450,6 @@ export function SessionView({ sessionId }: SessionViewProps): React.JSX.Element 
               const toolId = part.callID || part.id || `tool-${Date.now()}`
               const toolName = part.tool || undefined
               const state = part.state || {}
-
-              console.debug('[TOOL_DEBUG] stream event', {
-                toolId,
-                toolName,
-                status: state.status,
-                hasOutput: !!state.output,
-                hasError: !!state.error,
-                hasInput: !!state.input
-              })
 
               const statusMap: Record<string, ToolStatus> = {
                 pending: 'pending',

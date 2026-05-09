@@ -292,15 +292,6 @@ export function useOpenCodeGlobalListener(): void {
             return
           }
 
-          // Keep session.updated for background title sync (some events use this type)
-          if (event.type === 'session.updated') {
-            console.log('[TITLE_DEBUG] globalListener received session.updated', {
-              eventSessionId: sessionId,
-              activeId,
-              isBackground: sessionId !== activeId,
-              title: event.data?.info?.title || event.data?.title
-            })
-          }
           if (event.type === 'session.updated' && sessionId !== activeId) {
             const rawTitle = event.data?.info?.title || event.data?.title
             const sessionTitle = rawTitle ? maybeExtractJsonTitle(rawTitle) : rawTitle
@@ -309,7 +300,6 @@ export function useOpenCodeGlobalListener(): void {
               sessionTitle || ''
             )
             if (sessionTitle && !isOpenCodeDefault) {
-              console.log('[TITLE_DEBUG] globalListener calling updateSessionName', { sessionId, sessionTitle })
               useSessionStore.getState().updateSessionName(sessionId, sessionTitle)
             }
             return

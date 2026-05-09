@@ -35,9 +35,6 @@ export function SessionStreamPanel({
     opencodeSessionId
   })
 
-  // Diagnostic: log what the hook returned
-  console.info('[SessionStreamPanel] render — sessionId=%s, opcSessionId=%s, isLoading=%s, messageCount=%d, streamingPartsCount=%d, isStreaming=%s', sessionId, opencodeSessionId, isLoading, messages.length, streamingParts.length, isStreaming)
-
   // Auto-scroll logic
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)

@@ -47,9 +47,11 @@ export function useSidebarBranchWatcher(worktreePaths: string[]): void {
       }
     }
 
-    // Load initial branch info for all current paths
+    // Load branch info only for newly added paths. Existing paths already have
+    // cached branch data and a watcher that will refresh on HEAD changes.
     const { loadBranchInfo } = useGitStore.getState()
     for (const path of worktreePaths) {
+      if (prevSet.has(path)) continue
       loadBranchInfo(path)
     }
 
