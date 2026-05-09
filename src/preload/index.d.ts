@@ -133,6 +133,29 @@ type SessionActivityKind =
 
 type SessionActivityTone = 'tool' | 'approval' | 'info' | 'error'
 
+type UpdateStatus =
+  | 'idle'
+  | 'checking'
+  | 'available'
+  | 'not-available'
+  | 'downloading'
+  | 'downloaded'
+  | 'error'
+
+interface UpdateState {
+  status: UpdateStatus
+  version: string | null
+  error: string | null
+  percent: number | null
+}
+
+interface UpdateProgress {
+  percent: number
+  bytesPerSecond: number
+  transferred: number
+  total: number
+}
+
 interface SessionActivity {
   id: string
   session_id: string
@@ -1651,6 +1674,17 @@ declare global {
       abort: (sessionId: string) => Promise<boolean>
       getRun: (sessionId: string) => Promise<BashRunSnapshot | null>
       onStream: (callback: (event: BashStreamEvent) => void) => () => void
+    }
+    updates: {
+      getState: () => Promise<UpdateState>
+      check: () => Promise<UpdateState>
+      download: () => Promise<UpdateState>
+      install: () => Promise<void>
+      onState: (callback: (state: UpdateState) => void) => () => void
+      onAvailable: (callback: (info: { version: string | null }) => void) => () => void
+      onDownloaded: (callback: (info: { version: string | null }) => void) => () => void
+      onProgress: (callback: (progress: UpdateProgress) => void) => () => void
+      onError: (callback: (error: { message: string }) => void) => () => void
     }
   }
 

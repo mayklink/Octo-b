@@ -75,6 +75,7 @@ import { APP_SETTINGS_DB_KEY } from '../shared/types/settings'
 import { openCodeService } from './services/opencode-service'
 import { setKeepAwake, cleanupPowerSaveBlocker } from './services/power-save-blocker'
 import { configurePetWindow, destroyPetWindow, getPetWindow } from './services/pet-window'
+import { registerUpdateService } from './services/update-service'
 
 const log = createLogger({ component: 'Main' })
 
@@ -654,6 +655,8 @@ app.whenReady().then(async () => {
     registerBashHandlers(mainWindow)
     log.info('Registering Terminal handlers')
     registerTerminalHandlers(mainWindow)
+    log.info('Registering update service')
+    registerUpdateService(mainWindow)
 
     // Set up notification service with main window reference
     notificationService.setMainWindow(mainWindow)

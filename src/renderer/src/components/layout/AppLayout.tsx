@@ -20,6 +20,7 @@ import { useWindowFocusRefresh } from '@/hooks/useWindowFocusRefresh'
 import { useWorktreeWatcher } from '@/hooks/useWorktreeWatcher'
 import { useConnectionWatcher } from '@/hooks/useConnectionWatcher'
 import { useKeepAwake } from '@/hooks/useKeepAwake'
+import { useAppUpdates } from '@/hooks/useAppUpdates'
 import { ErrorBoundary, ErrorFallback } from '@/components/error'
 import { CreatePRModal } from '@/components/pr/CreatePRModal'
 import { ProjectSettingsDialog } from '@/components/projects/ProjectSettingsDialog'
@@ -136,6 +137,8 @@ export function AppLayout({ children }: AppLayoutProps): React.JSX.Element {
   useConnectionWatcher()
   // Keep the computer awake while any session is actively streaming (opt-in via settings)
   useKeepAwake()
+  // Let packaged builds offer updates published through GitHub Releases.
+  useAppUpdates()
 
   // Drag-and-drop from Finder
   const activeSessionId = useSessionStore((s) => s.activeSessionId)

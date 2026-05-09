@@ -2136,6 +2136,87 @@ const bash = {
   }
 }
 
+type UpdateStatus =
+  | 'idle'
+  | 'checking'
+  | 'available'
+  | 'not-available'
+  | 'downloading'
+  | 'downloaded'
+  | 'error'
+
+interface UpdateState {
+  status: UpdateStatus
+  version: string | null
+  error: string | null
+  percent: number | null
+}
+
+interface UpdateProgress {
+  percent: number
+  bytesPerSecond: number
+  transferred: number
+  total: number
+}
+
+const updates = {
+  getState: (): Promise<UpdateState> => ipcRenderer.invoke('updates:getState'),
+  check: (): Promise<UpdateState> => ipcRenderer.invoke('updates:check'),
+  download: (): Promise<UpdateState> => ipcRenderer.invoke('updates:download'),
+  install: (): Promise<void> => ipcRenderer.invoke('updates:install'),
+  onState: (callback: (state: UpdateState) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, state: UpdateState): void => {
+      callback(state)
+    }
+    ipcRenderer.on('updates:state', handler)
+    return () => {
+      ipcRenderer.removeListener('updates:state', handler)
+    }
+  },
+  onAvailable: (callback: (info: { version: string | null }) => void): (() => void) => {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      info: { version: string | null }
+    ): void => {
+      callback(info)
+    }
+    ipcRenderer.on('updates:available', handler)
+    return () => {
+      ipcRenderer.removeListener('updates:available', handler)
+    }
+  },
+  onDownloaded: (callback: (info: { version: string | null }) => void): (() => void) => {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      info: { version: string | null }
+    ): void => {
+      callback(info)
+    }
+    ipcRenderer.on('updates:downloaded', handler)
+    return () => {
+      ipcRenderer.removeListener('updates:downloaded', handler)
+    }
+  },
+  onProgress: (callback: (progress: UpdateProgress) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, progress: UpdateProgress): void => {
+      callback(progress)
+    }
+    ipcRenderer.on('updates:progress', handler)
+    return () => {
+      ipcRenderer.removeListener('updates:progress', handler)
+    }
+  },
+  onError: (callback: (error: { message: string }) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, error: { message: string }): void => {
+      callback(error)
+    }
+    ipcRenderer.on('updates:error', handler)
+    return () => {
+      ipcRenderer.removeListener('updates:error', handler)
+    }
+  }
+}
+
 // Use `contextBridge` APIs to expose Electron APIs to
 // renderer only if context isolation is enabled, otherwise
 // just add to the DOM global.
@@ -2164,6 +2245,7 @@ if (process.contextIsolated) {
     contextBridge.exposeInMainWorld('kanban', kanban)
     contextBridge.exposeInMainWorld('ticketImport', ticketImport)
     contextBridge.exposeInMainWorld('bash', bash)
+    contextBridge.exposeInMainWorld('updates', updates)
   } catch (error) {
     console.error(error)
   }
@@ -2212,4 +2294,6 @@ if (process.contextIsolated) {
   window.ticketImport = ticketImport
   // @ts-expect-error (define in dts)
   window.bash = bash
+  // @ts-expect-error (define in dts)
+  window.updates = updates
 }
