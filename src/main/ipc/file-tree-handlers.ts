@@ -608,7 +608,9 @@ export function registerFileTreeHandlers(window: BrowserWindow): void {
           persistent: true,
           ignoreInitial: true,
           depth: 10,
-          followSymlinks: false
+          followSymlinks: false,
+          ignorePermissionErrors: true,
+          usePolling: false
         })
 
         watcher.on('add', (path) => {
