@@ -81,8 +81,7 @@ export async function watchBranch(worktreePath: string): Promise<void> {
   if (existingHead) {
     const entry = watchedPaths.get(existingHead)
     if (entry) {
-      entry.refCount++
-      log.info('Incremented branch watcher refCount', { worktreePath, refCount: entry.refCount })
+      log.info('Branch watcher already active', { worktreePath, refCount: entry.refCount })
       return
     }
   }

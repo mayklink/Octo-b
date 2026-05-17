@@ -79,6 +79,7 @@ export function loadShellEnv(): void {
   }
 
   const shell = process.env.SHELL || (process.platform === 'darwin' ? '/bin/zsh' : '/bin/bash')
+  const shellFlags = process.env.OCTOB_INTERACTIVE_SHELL_ENV === '1' ? '-ilc' : '-lc'
 
   try {
     // Use null-delimited output (`env -0`) to safely handle values that
@@ -88,14 +89,14 @@ export function loadShellEnv(): void {
     let delimiter: string
 
     try {
-      raw = execFileSync(shell, ['-ilc', 'env -0'], {
+      raw = execFileSync(shell, [shellFlags, 'env -0'], {
         encoding: 'utf-8',
         timeout: 5000,
         maxBuffer: 10 * 1024 * 1024
       })
       delimiter = '\0'
     } catch {
-      raw = execFileSync(shell, ['-ilc', 'env'], {
+      raw = execFileSync(shell, [shellFlags, 'env'], {
         encoding: 'utf-8',
         timeout: 5000,
         maxBuffer: 10 * 1024 * 1024
@@ -118,11 +119,13 @@ export function loadShellEnv(): void {
 
     log.info('Loaded shell environment', {
       shell,
+      shellFlags,
       varsLoaded: Object.keys(parsed).length
     })
   } catch (err) {
     log.warn('Failed to load shell environment, continuing with default env', {
       shell,
+      shellFlags,
       error: err instanceof Error ? err.message : String(err)
     })
   }

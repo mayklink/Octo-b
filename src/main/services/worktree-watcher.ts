@@ -30,7 +30,7 @@ const WORKTREE_DEBOUNCE_MS = 500
 
 interface WatcherEntry {
   gitWatcher: chokidar.FSWatcher | null
-  worktreeWatcher: chokidar.FSWatcher
+  worktreeWatcher: chokidar.FSWatcher | null
   gitDebounceTimer: ReturnType<typeof setTimeout> | null
   worktreeDebounceTimer: ReturnType<typeof setTimeout> | null
   refCount: number
@@ -127,6 +127,12 @@ const WORKTREE_IGNORE_PATTERNS = [
   '**/*.log'
 ]
 
+// Full-tree recursive watching is expensive on macOS for large repos/many worktrees.
+// Keep real-time Git metadata updates by default and let focused/manual refreshes
+// pick up unstaged file edits. Set OCTOB_RECURSIVE_WORKTREE_WATCHER=1 to opt back in.
+const ENABLE_RECURSIVE_WORKTREE_WATCHER =
+  process.platform !== 'darwin' || process.env.OCTOB_RECURSIVE_WORKTREE_WATCHER === '1'
+
 export function initWorktreeWatcher(window: BrowserWindow): void {
   mainWindow = window
   log.info('WorktreeWatcher initialized')
@@ -191,13 +197,19 @@ export async function watchWorktree(worktreePath: string): Promise<void> {
     })
   }
 
-  // Working tree watcher (for file modifications before staging)
-  const worktreeWatcher = chokidar.watch(worktreePath, {
-    ignored: WORKTREE_IGNORE_PATTERNS,
-    persistent: true,
-    ignoreInitial: true,
-    depth: 10
-  })
+  // Working tree watcher (for file modifications before staging). On macOS this is
+  // opt-in because recursive FSEvents across several worktrees can dominate CPU.
+  const worktreeWatcher = ENABLE_RECURSIVE_WORKTREE_WATCHER
+    ? chokidar.watch(worktreePath, {
+        ignored: WORKTREE_IGNORE_PATTERNS,
+        persistent: true,
+        ignoreInitial: true,
+        depth: 10,
+        followSymlinks: false,
+        ignorePermissionErrors: true,
+        usePolling: false
+      })
+    : null
 
   const entry: WatcherEntry = {
     gitWatcher,
@@ -226,19 +238,24 @@ export async function watchWorktree(worktreePath: string): Promise<void> {
     })
   }
 
-  worktreeWatcher.on('add', () => scheduleWorktreeRefresh(entry, worktreePath))
-  worktreeWatcher.on('change', () => scheduleWorktreeRefresh(entry, worktreePath))
-  worktreeWatcher.on('unlink', () => scheduleWorktreeRefresh(entry, worktreePath))
-  worktreeWatcher.on('addDir', () => scheduleWorktreeRefresh(entry, worktreePath))
-  worktreeWatcher.on('unlinkDir', () => scheduleWorktreeRefresh(entry, worktreePath))
-  worktreeWatcher.on('error', (error) => {
-    log.error('Worktree watcher error', error, { worktreePath })
-  })
+  if (worktreeWatcher) {
+    worktreeWatcher.on('add', () => scheduleWorktreeRefresh(entry, worktreePath))
+    worktreeWatcher.on('change', () => scheduleWorktreeRefresh(entry, worktreePath))
+    worktreeWatcher.on('unlink', () => scheduleWorktreeRefresh(entry, worktreePath))
+    worktreeWatcher.on('addDir', () => scheduleWorktreeRefresh(entry, worktreePath))
+    worktreeWatcher.on('unlinkDir', () => scheduleWorktreeRefresh(entry, worktreePath))
+    worktreeWatcher.on('error', (error) => {
+      log.error('Worktree watcher error', error, { worktreePath })
+    })
+  } else {
+    log.info('Recursive worktree watcher disabled on this platform', { worktreePath })
+  }
 
   watchers.set(worktreePath, entry)
   log.info('Worktree watcher started', {
     worktreePath,
     hasGitWatcher: !!gitWatcher,
+    hasWorktreeWatcher: !!worktreeWatcher,
     gitDir
   })
 }
@@ -279,7 +296,7 @@ export async function unwatchWorktree(worktreePath: string): Promise<void> {
   }
 
   try {
-    await entry.worktreeWatcher.close()
+    if (entry.worktreeWatcher) await entry.worktreeWatcher.close()
   } catch (error) {
     log.error(
       'Failed to close worktree watcher',
