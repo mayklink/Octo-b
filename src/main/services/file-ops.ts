@@ -1,5 +1,5 @@
-import { readFileSync, writeFileSync, existsSync, statSync } from 'fs'
-import { join } from 'path'
+import { readFileSync, writeFileSync, existsSync, statSync, mkdirSync } from 'fs'
+import { dirname, isAbsolute, relative, resolve } from 'path'
 import { getImageMimeType } from '@shared/types/file-utils'
 
 const MAX_FILE_SIZE = 1024 * 1024 // 1MB
@@ -77,6 +77,53 @@ export function writeFile(filePath: string, content: string): { success: boolean
     }
     writeFileSync(filePath, content, 'utf-8')
     return { success: true }
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+  }
+}
+
+export function createFile(
+  worktreePath: string,
+  relativePath: string,
+  content: string = ''
+): { success: boolean; filePath?: string; error?: string } {
+  try {
+    if (!worktreePath || typeof worktreePath !== 'string') {
+      return { success: false, error: 'Invalid worktree path' }
+    }
+    if (!relativePath || typeof relativePath !== 'string') {
+      return { success: false, error: 'Invalid file path' }
+    }
+    if (typeof content !== 'string') {
+      return { success: false, error: 'Invalid content' }
+    }
+
+    const normalizedRelativePath = relativePath.trim().replace(/\\/g, '/')
+    if (
+      !normalizedRelativePath ||
+      normalizedRelativePath.endsWith('/') ||
+      isAbsolute(normalizedRelativePath) ||
+      normalizedRelativePath
+        .split('/')
+        .some((segment) => segment === '..' || segment === '.' || segment === '')
+    ) {
+      return { success: false, error: 'Enter a relative file path inside the worktree' }
+    }
+
+    const root = resolve(worktreePath)
+    const filePath = resolve(root, normalizedRelativePath)
+    const relToRoot = relative(root, filePath)
+    if (relToRoot.startsWith('..') || isAbsolute(relToRoot)) {
+      return { success: false, error: 'File path must stay inside the worktree' }
+    }
+
+    if (existsSync(filePath)) {
+      return { success: false, error: 'File already exists' }
+    }
+
+    mkdirSync(dirname(filePath), { recursive: true })
+    writeFileSync(filePath, content, 'utf-8')
+    return { success: true, filePath }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
   }

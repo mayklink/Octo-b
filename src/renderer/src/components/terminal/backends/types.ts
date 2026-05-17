@@ -69,6 +69,9 @@ export interface TerminalBackend {
   /** Return selected text, or terminal buffer text when no selection exists */
   getTextForCopy?(): string
 
+  /** Return only the selected text, or an empty string when there is no selection */
+  getSelectionForCopy?(): string
+
   /** Update the terminal theme at runtime (re-reads CSS variables) */
   updateTheme?(): void
 

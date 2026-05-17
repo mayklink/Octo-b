@@ -14,9 +14,9 @@ import {
   Plug,
   Bug,
   ClipboardList,
-  FileSearch
+  FileSearch,
+  X
 } from 'lucide-react'
-import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { useSettingsStore } from '@/stores/useSettingsStore'
 import { SettingsAppearance } from './SettingsAppearance'
 import { SettingsGeneral } from './SettingsGeneral'
@@ -48,12 +48,9 @@ type SettingsSectionId =
   | 'shortcuts'
   | 'advanced'
 
-export function SettingsModal(): React.JSX.Element {
+function useSettingsSections(): ReadonlyArray<{ id: SettingsSectionId; label: string; icon: typeof Palette }> {
   const { t } = useTranslation()
-  const { isOpen, activeSection, closeSettings, openSettings, setActiveSection } =
-    useSettingsStore()
-
-  const sections = useMemo(
+  return useMemo(
     () =>
       [
         { id: 'appearance' as const, label: t('settings.nav.appearance'), icon: Palette },
@@ -76,6 +73,10 @@ export function SettingsModal(): React.JSX.Element {
       ] satisfies ReadonlyArray<{ id: SettingsSectionId; label: string; icon: typeof Palette }>,
     [t]
   )
+}
+
+export function SettingsOpenListener(): null {
+  const openSettings = useSettingsStore((s) => s.openSettings)
 
   // Listen for the custom event dispatched by keyboard shortcut handler
   useEffect(() => {
@@ -86,63 +87,78 @@ export function SettingsModal(): React.JSX.Element {
     return () => window.removeEventListener('octob:open-settings', handleOpenSettings)
   }, [openSettings])
 
-  return (
-    <Dialog
-      open={isOpen}
-      onOpenChange={(open) => {
-        if (!open) closeSettings()
-      }}
-    >
-      <DialogContent
-        className="max-w-3xl h-[70vh] p-0 gap-0 overflow-hidden"
-        data-testid="settings-modal"
-      >
-        <div className="flex h-full min-h-0">
-          {/* Left navigation */}
-          <nav className="w-48 border-r bg-muted/30 p-3 flex flex-col gap-1 shrink-0">
-            <div className="flex items-center gap-2 px-2 py-1.5 mb-2">
-              <Settings className="h-4 w-4 text-muted-foreground" />
-              <DialogTitle className="text-sm font-semibold">{t('settings.title')}</DialogTitle>
-            </div>
-            {sections.map((section) => {
-              const Icon = section.icon
-              return (
-                <button
-                  key={section.id}
-                  onClick={() => setActiveSection(section.id)}
-                  className={cn(
-                    'flex items-center gap-2 px-2 py-1.5 rounded-md text-sm transition-colors text-left',
-                    activeSection === section.id
-                      ? 'bg-accent text-accent-foreground'
-                      : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
-                  )}
-                  data-testid={`settings-nav-${section.id}`}
-                >
-                  <Icon className="h-4 w-4" />
-                  {section.label}
-                </button>
-              )
-            })}
-          </nav>
+  return null
+}
 
-          {/* Content area */}
-          <div className="flex-1 overflow-y-auto p-6">
-            {activeSection === 'appearance' && <SettingsAppearance />}
-            {activeSection === 'general' && <SettingsGeneral />}
-            {activeSection === 'task-prompts' && <SettingsTaskPrompts />}
-            {activeSection === 'code-review-prompts' && <SettingsCodeReviewPrompts />}
-            {activeSection === 'models' && <SettingsModels />}
-            {activeSection === 'pet' && <SettingsPet />}
-            {activeSection === 'editor' && <SettingsEditor />}
-            {activeSection === 'terminal' && <SettingsTerminal />}
-            {activeSection === 'integrations' && <SettingsIntegrations />}
-            {activeSection === 'security' && <SettingsSecurity />}
-            {activeSection === 'privacy' && <SettingsPrivacy />}
-            {activeSection === 'shortcuts' && <SettingsShortcuts />}
-            {activeSection === 'advanced' && <SettingsAdvanced />}
-          </div>
+export function SettingsView(): React.JSX.Element {
+  const { t } = useTranslation()
+  const activeSection = useSettingsStore((s) => s.activeSection)
+  const closeSettings = useSettingsStore((s) => s.closeSettings)
+  const setActiveSection = useSettingsStore((s) => s.setActiveSection)
+  const sections = useSettingsSections()
+
+  return (
+    <div className="flex h-full min-h-0 bg-background" data-testid="settings-view">
+      <nav className="w-64 border-r bg-muted/20 p-4 flex flex-col gap-1 shrink-0">
+        <div className="flex items-center gap-2 px-2 py-1.5 mb-3">
+          <Settings className="h-4 w-4 text-muted-foreground shrink-0" />
+          <h1 className="text-sm font-semibold flex-1">{t('settings.title')}</h1>
+          <button
+            type="button"
+            onClick={closeSettings}
+            className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+            aria-label="Close settings"
+            data-testid="settings-close"
+          >
+            <X className="h-4 w-4" />
+          </button>
         </div>
-      </DialogContent>
-    </Dialog>
+
+        {sections.map((section) => {
+          const Icon = section.icon
+          return (
+            <button
+              key={section.id}
+              onClick={() => setActiveSection(section.id)}
+              className={cn(
+                'flex items-center gap-2 px-2 py-2 rounded-md text-sm transition-colors text-left',
+                activeSection === section.id
+                  ? 'bg-accent text-accent-foreground'
+                  : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
+              )}
+              data-testid={`settings-nav-${section.id}`}
+            >
+              <Icon className="h-4 w-4 shrink-0" />
+              <span className="truncate">{section.label}</span>
+            </button>
+          )
+        })}
+      </nav>
+
+      <div className="flex-1 min-w-0 overflow-y-auto">
+        <div className="mx-auto w-full max-w-5xl px-8 py-8">
+          {activeSection === 'appearance' && <SettingsAppearance />}
+          {activeSection === 'general' && <SettingsGeneral />}
+          {activeSection === 'task-prompts' && <SettingsTaskPrompts />}
+          {activeSection === 'code-review-prompts' && <SettingsCodeReviewPrompts />}
+          {activeSection === 'models' && <SettingsModels />}
+          {activeSection === 'pet' && <SettingsPet />}
+          {activeSection === 'editor' && <SettingsEditor />}
+          {activeSection === 'terminal' && <SettingsTerminal />}
+          {activeSection === 'integrations' && <SettingsIntegrations />}
+          {activeSection === 'security' && <SettingsSecurity />}
+          {activeSection === 'privacy' && <SettingsPrivacy />}
+          {activeSection === 'shortcuts' && <SettingsShortcuts />}
+          {activeSection === 'advanced' && <SettingsAdvanced />}
+        </div>
+      </div>
+    </div>
   )
+}
+
+/**
+ * Kept for compatibility with existing imports. Settings are rendered by MainPane.
+ */
+export function SettingsModal(): React.JSX.Element {
+  return <SettingsOpenListener />
 }

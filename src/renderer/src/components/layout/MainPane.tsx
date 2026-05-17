@@ -19,6 +19,7 @@ import { KanbanIcon } from '@/components/kanban/KanbanIcon'
 import { BoardAssistantView } from '@/components/kanban/BoardAssistantView'
 import { PRNotificationStack } from '@/components/pr/PRNotificationStack'
 import { MainPaneTerminalPanel } from './MainPaneTerminalPanel'
+import { SettingsView } from '@/components/settings'
 
 const MonacoDiffView = lazy(() => import('@/components/diff/MonacoDiffView'))
 const WorktreeContextEditor = lazy(() =>
@@ -48,6 +49,7 @@ export function MainPane({ children }: MainPaneProps): React.JSX.Element {
   const pinnedStoreLoaded = usePinnedStore((state) => state.loaded)
   const boardMode = useSettingsStore((s) => s.boardMode)
   const terminalPosition = useSettingsStore((s) => s.terminalPosition)
+  const settingsOpen = useSettingsStore((s) => s.isOpen)
   const selectedProjectId = useProjectStore((state) => state.selectedProjectId)
   const selectedProjectPath = useProjectStore((state) =>
     state.projects.find((p) => p.id === state.selectedProjectId)?.path ?? ''
@@ -175,6 +177,10 @@ export function MainPane({ children }: MainPaneProps): React.JSX.Element {
   const renderContent = () => {
     if (children) {
       return children
+    }
+
+    if (settingsOpen) {
+      return <SettingsView />
     }
 
     // Board assistant tab is active — render BoardAssistantView in main pane
@@ -365,12 +371,11 @@ export function MainPane({ children }: MainPaneProps): React.JSX.Element {
       data-testid="main-pane"
     >
       <PRNotificationStack />
-      {(selectedWorktreeId || selectedConnectionId) && <SessionTabs />}
+      {!settingsOpen && (selectedWorktreeId || selectedConnectionId) && <SessionTabs />}
       <div className="flex-1 flex flex-col min-h-0">
         {renderContent()}
-        {/* Always-mounted terminal sessions — kept alive to preserve PTY state across tab switches */}
         {mountedTerminalSessionIds.map((sessionId) => {
-          const isActive = visibleTerminalId === sessionId
+          const isActive = !settingsOpen && visibleTerminalId === sessionId
           return (
             <div key={sessionId} className={isActive ? 'flex-1 flex flex-col min-h-0' : 'hidden'}>
               <SessionTerminalView sessionId={sessionId} isVisible={isActive} />
@@ -378,7 +383,7 @@ export function MainPane({ children }: MainPaneProps): React.JSX.Element {
           )
         })}
       </div>
-      {terminalPosition === 'bottom' && <MainPaneTerminalPanel />}
+      {!settingsOpen && terminalPosition === 'bottom' && <MainPaneTerminalPanel />}
     </main>
   )
 }

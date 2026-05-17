@@ -90,6 +90,10 @@ interface WorktreeItemProps {
   isFirstItem?: boolean
   isDragging?: boolean
   isDragOver?: boolean
+  isMultiSelected?: boolean
+  showSelectionControls?: boolean
+  selectionDisabled?: boolean
+  onToggleMultiSelect?: (worktreeId: string) => void
   onDragStart?: (e: React.DragEvent) => void
   onDragOver?: (e: React.DragEvent) => void
   onDrop?: (e: React.DragEvent) => void
@@ -102,6 +106,10 @@ export function WorktreeItem({
   isFirstItem,
   isDragging,
   isDragOver,
+  isMultiSelected = false,
+  showSelectionControls = false,
+  selectionDisabled = false,
+  onToggleMultiSelect,
   onDragStart,
   onDragOver,
   onDrop,
@@ -120,6 +128,7 @@ export function WorktreeItem({
   const isRunProcessAlive = useScriptStore((s) => s.scriptStates[worktree.id]?.runRunning ?? false)
   const liveBranch = useGitStore((s) => s.branchInfoByWorktree.get(worktree.path))
   const displayName = liveBranch?.name ?? worktree.name
+  const branchNameForCopy = liveBranch?.name ?? worktree.branch_name
   const isSelected = selectedWorktreeId === worktree.id
 
   // Connection mode state
@@ -330,6 +339,10 @@ export function WorktreeItem({
       toggleConnectionModeWorktree(worktree.id)
       return
     }
+    if (showSelectionControls && onToggleMultiSelect && !worktree.is_default) {
+      onToggleMultiSelect(worktree.id)
+      return
+    }
     selectWorktree(worktree.id)
     selectProject(worktree.project_id)
     useWorktreeStatusStore.getState().clearWorktreeUnread(worktree.id)
@@ -366,6 +379,15 @@ export function WorktreeItem({
   const handleCopyPath = async (): Promise<void> => {
     await window.projectOps.copyToClipboard(worktree.path)
     clipboardToast.copied('Path')
+  }
+
+  const handleCopyBranchName = async (): Promise<void> => {
+    if (!branchNameForCopy) {
+      toast.error('No branch name to copy')
+      return
+    }
+    await window.projectOps.copyToClipboard(branchNameForCopy)
+    clipboardToast.copied('Branch name')
   }
 
   const doArchive = useCallback(async (): Promise<void> => {
@@ -514,11 +536,12 @@ export function WorktreeItem({
           className={cn(
             'group flex items-center gap-1.5 pl-8 pr-1 py-1 rounded-md cursor-pointer transition-colors',
             isSelected ? 'bg-accent text-accent-foreground' : 'hover:bg-accent/50',
+            isMultiSelected && !isSelected && 'bg-accent/30',
             isArchiving && 'opacity-50 pointer-events-none',
             isDragging && 'opacity-50',
             isDragOver && 'border-t-2 border-primary'
           )}
-          draggable={!worktree.is_default && !isRenamingBranch}
+          draggable={!worktree.is_default && !isRenamingBranch && !showSelectionControls}
           onDragStart={onDragStart}
           onDragOver={onDragOver}
           onDrop={onDrop}
@@ -526,6 +549,23 @@ export function WorktreeItem({
           onClick={handleClick}
           data-testid={`worktree-item-${worktree.id}`}
         >
+          {onToggleMultiSelect && !worktree.is_default && (
+            <Checkbox
+              checked={isMultiSelected}
+              disabled={selectionDisabled || isArchiving}
+              className={cn(
+                'h-3.5 w-3.5 shrink-0 transition-opacity',
+                showSelectionControls || isMultiSelected
+                  ? 'opacity-100'
+                  : 'opacity-0 group-hover:opacity-100'
+              )}
+              onClick={(e) => e.stopPropagation()}
+              onCheckedChange={() => onToggleMultiSelect(worktree.id)}
+              aria-label={`Select ${displayName}`}
+              data-testid={`worktree-select-${worktree.id}`}
+            />
+          )}
+
           {/* Branch Icons / Status Badges — show up to 2 */}
           {isArchiving ? (
             <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground shrink-0" />
@@ -720,6 +760,12 @@ export function WorktreeItem({
                 <Copy className="h-4 w-4 mr-2" />
                 Copy Path
               </DropdownMenuItem>
+              {branchNameForCopy && (
+                <DropdownMenuItem onClick={handleCopyBranchName}>
+                  <GitBranch className="h-4 w-4 mr-2" />
+                  Copy Branch Name
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem onClick={handleTogglePin}>
                 {isPinned ? <PinOff className="h-4 w-4 mr-2" /> : <Pin className="h-4 w-4 mr-2" />}
                 {isPinned ? 'Unpin' : 'Pin'}
@@ -841,6 +887,12 @@ export function WorktreeItem({
           <Copy className="h-4 w-4 mr-2" />
           Copy Path
         </ContextMenuItem>
+        {branchNameForCopy && (
+          <ContextMenuItem onClick={handleCopyBranchName}>
+            <GitBranch className="h-4 w-4 mr-2" />
+            Copy Branch Name
+          </ContextMenuItem>
+        )}
         <ContextMenuItem onClick={handleTogglePin}>
           {isPinned ? <PinOff className="h-4 w-4 mr-2" /> : <Pin className="h-4 w-4 mr-2" />}
           {isPinned ? 'Unpin' : 'Pin'}
