@@ -1669,6 +1669,12 @@ const fileOps = {
     ipcRenderer.invoke('file:read', filePath),
   writeFile: (filePath: string, content: string): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke('file:write', filePath, content),
+  createFile: (
+    worktreePath: string,
+    relativePath: string,
+    content: string = ''
+  ): Promise<{ success: boolean; filePath?: string; error?: string }> =>
+    ipcRenderer.invoke('file:create', worktreePath, relativePath, content),
   readImageAsBase64: (
     filePath: string
   ): Promise<{ success: boolean; data?: string; mimeType?: string; error?: string }> =>

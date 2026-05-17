@@ -10,6 +10,13 @@ import { XtermBackend } from './backends/XtermBackend'
 import { GhosttyBackend } from './backends/GhosttyBackend'
 import type { TerminalBackend as ITerminalBackend, TerminalBackendType } from './backends/types'
 import { clipboardToast } from '@/lib/toast'
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger
+} from '@/components/ui/context-menu'
+import { Copy } from 'lucide-react'
 import '@xterm/xterm/css/xterm.css'
 import '@/styles/xterm.css'
 
@@ -66,6 +73,7 @@ export const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(fu
     'creating'
   )
   const [exitCode, setExitCode] = useState<number | undefined>(undefined)
+  const [hasTerminalSelection, setHasTerminalSelection] = useState(false)
 
   const restartTerminal = useTerminalStore((s) => s.restartTerminal)
   const destroyTerminal = useTerminalStore((s) => s.destroyTerminal)
@@ -216,6 +224,26 @@ export const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(fu
       try {
         await window.projectOps.copyToClipboard(text)
         clipboardToast.copied('Terminal logs')
+      } catch {
+        clipboardToast.failed()
+      }
+    }
+  }, [])
+
+  const handleCopySelection = useCallback(async () => {
+    const text = backendRef.current?.getSelectionForCopy?.().trimEnd() ?? ''
+    if (!text) {
+      clipboardToast.failed()
+      return
+    }
+
+    try {
+      await navigator.clipboard.writeText(text)
+      clipboardToast.copied('Terminal selection')
+    } catch {
+      try {
+        await window.projectOps.copyToClipboard(text)
+        clipboardToast.copied('Terminal selection')
       } catch {
         clipboardToast.failed()
       }
@@ -414,12 +442,28 @@ export const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(fu
         onClear={() => backendRef.current?.clear()}
         backendType={activeBackendTypeRef.current || 'xterm'}
       />
-      <div
-        ref={containerRef}
-        className="terminal-view-container flex-1 min-h-0"
-        onClick={handleClick}
-        data-testid="terminal-view-container"
-      />
+      <ContextMenu
+        onOpenChange={(open) => {
+          if (open) {
+            setHasTerminalSelection(Boolean(backendRef.current?.getSelectionForCopy?.()))
+          }
+        }}
+      >
+        <ContextMenuTrigger asChild>
+          <div
+            ref={containerRef}
+            className="terminal-view-container flex-1 min-h-0"
+            onClick={handleClick}
+            data-testid="terminal-view-container"
+          />
+        </ContextMenuTrigger>
+        <ContextMenuContent className="w-44">
+          <ContextMenuItem disabled={!hasTerminalSelection} onClick={handleCopySelection}>
+            <Copy className="mr-2 h-4 w-4" />
+            Copy selection
+          </ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
     </div>
   )
 })

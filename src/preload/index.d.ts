@@ -940,6 +940,15 @@ declare global {
         success: boolean
         error?: string
       }>
+      createFile: (
+        worktreePath: string,
+        relativePath: string,
+        content?: string
+      ) => Promise<{
+        success: boolean
+        filePath?: string
+        error?: string
+      }>
       readImageAsBase64: (filePath: string) => Promise<{
         success: boolean
         data?: string

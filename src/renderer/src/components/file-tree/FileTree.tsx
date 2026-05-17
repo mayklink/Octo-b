@@ -1,12 +1,32 @@
-import { useEffect, useCallback, useRef, useMemo } from 'react'
+import { useEffect, useCallback, useRef, useMemo, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { FolderOpen } from 'lucide-react'
+import { FilePlus, FolderOpen } from 'lucide-react'
 import { useFileTreeStore } from '@/stores/useFileTreeStore'
 import { useGitStore } from '@/stores/useGitStore'
+import { useFileViewerStore } from '@/stores/useFileViewerStore'
+import { useWorktreeStore } from '@/stores/useWorktreeStore'
 import { FileTreeHeader } from './FileTreeHeader'
 import { FileTreeFilter } from './FileTreeFilter'
 import { VirtualFileTreeNode } from './FileTreeNode'
 import { cn } from '@/lib/utils'
+import { toast } from '@/lib/toast'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle
+} from '@/components/ui/alert-dialog'
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger
+} from '@/components/ui/context-menu'
 
 // File tree node structure
 interface FileTreeNode {
@@ -26,6 +46,10 @@ interface GitFileStatus {
   status: 'M' | 'A' | 'D' | '?' | 'C' | ''
   staged: boolean
 }
+
+const EMPTY_TREE: FileTreeNode[] = []
+const EMPTY_EXPANDED_PATHS = new Set<string>()
+const EMPTY_GIT_STATUSES: GitFileStatus[] = []
 
 interface FlatNode {
   node: FileTreeNode
@@ -123,9 +147,13 @@ export function FileTree({
   } = useFileTreeStore()
 
   const { getFileStatuses, loadFileStatuses } = useGitStore()
+  const worktreesByProject = useWorktreeStore((s) => s.worktreesByProject)
 
   const currentWorktreeRef = useRef<string | null>(null)
   const parentRef = useRef<HTMLDivElement>(null)
+  const [newFileDialogOpen, setNewFileDialogOpen] = useState(false)
+  const [newFilePath, setNewFilePath] = useState('')
+  const [isCreatingFile, setIsCreatingFile] = useState(false)
 
   // Load file tree, git statuses, and start watching when worktree changes
   useEffect(() => {
@@ -157,10 +185,18 @@ export function FileTree({
     }
   }, [stopWatching])
 
-  const tree = worktreePath ? getFileTree(worktreePath) : []
-  const expandedPaths = worktreePath ? getExpandedPaths(worktreePath) : new Set<string>()
+  const tree = worktreePath ? getFileTree(worktreePath) : EMPTY_TREE
+  const expandedPaths = worktreePath ? getExpandedPaths(worktreePath) : EMPTY_EXPANDED_PATHS
   const filter = worktreePath ? getFilter(worktreePath) : ''
-  const gitStatuses = worktreePath ? getFileStatuses(worktreePath) : []
+  const gitStatuses = worktreePath ? getFileStatuses(worktreePath) : EMPTY_GIT_STATUSES
+  const currentWorktreeId = useMemo(() => {
+    if (!worktreePath) return null
+    for (const worktrees of worktreesByProject.values()) {
+      const match = worktrees.find((worktree) => worktree.path === worktreePath)
+      if (match) return match.id
+    }
+    return null
+  }, [worktreePath, worktreesByProject])
 
   // Build a Map for fast git status lookup
   const gitStatusMap = useMemo(() => {
@@ -216,11 +252,116 @@ export function FileTree({
     }
   }, [worktreePath, isConnectionMode, loadFileTree, loadFileStatuses])
 
+  const handleOpenNewFileDialog = useCallback((initialPath: string = '') => {
+    setNewFilePath(initialPath)
+    setNewFileDialogOpen(true)
+  }, [])
+
+  const handleCreateFile = useCallback(async (): Promise<void> => {
+    if (!worktreePath || isCreatingFile) return
+
+    const trimmedPath = newFilePath.trim()
+    if (!trimmedPath) {
+      toast.error('Enter a file path')
+      return
+    }
+
+    setIsCreatingFile(true)
+    try {
+      const result = await window.fileOps.createFile(worktreePath, trimmedPath)
+      if (!result.success || !result.filePath) {
+        toast.error(result.error || 'Failed to create file')
+        return
+      }
+
+      await loadFileTree(worktreePath)
+      if (!isConnectionMode) loadFileStatuses(worktreePath)
+
+      const parentPath = trimmedPath.replace(/\\/g, '/').split('/').slice(0, -1).join('/')
+      if (parentPath) {
+        const separator = worktreePath.includes('\\') ? '\\' : '/'
+        const nextExpandedPaths = new Set(expandedPaths)
+        const parentSegments = parentPath.split('/')
+        for (let index = 1; index <= parentSegments.length; index++) {
+          nextExpandedPaths.add(
+            `${worktreePath}${separator}${parentSegments.slice(0, index).join(separator)}`
+          )
+        }
+        useFileTreeStore.getState().setExpanded(worktreePath, nextExpandedPaths)
+      }
+
+      const fileName = trimmedPath.replace(/\\/g, '/').split('/').pop() || trimmedPath
+      if (currentWorktreeId) {
+        useFileViewerStore.getState().openFile(result.filePath, fileName, currentWorktreeId)
+      }
+
+      toast.success(`Created ${fileName}`)
+      setNewFileDialogOpen(false)
+      setNewFilePath('')
+    } finally {
+      setIsCreatingFile(false)
+    }
+  }, [
+    worktreePath,
+    isCreatingFile,
+    newFilePath,
+    loadFileTree,
+    isConnectionMode,
+    loadFileStatuses,
+    expandedPaths,
+    currentWorktreeId
+  ])
+
+  const createFileDialog = (
+    <AlertDialog open={newFileDialogOpen} onOpenChange={setNewFileDialogOpen}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>New file</AlertDialogTitle>
+          <AlertDialogDescription>
+            Enter a relative path. Folders in the path will be created automatically.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <form
+          className="space-y-3"
+          onSubmit={(event) => {
+            event.preventDefault()
+            void handleCreateFile()
+          }}
+        >
+          <Input
+            autoFocus
+            value={newFilePath}
+            onChange={(event) => setNewFilePath(event.target.value)}
+            placeholder="src/example.ts"
+            disabled={isCreatingFile}
+            data-testid="new-file-path-input"
+          />
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isCreatingFile}>Cancel</AlertDialogCancel>
+            <Button type="submit" disabled={!newFilePath.trim() || isCreatingFile}>
+              {isCreatingFile ? 'Creating...' : 'Create'}
+            </Button>
+          </AlertDialogFooter>
+        </form>
+      </AlertDialogContent>
+    </AlertDialog>
+  )
+
+  const fileTreeContextMenu = worktreePath ? (
+    <ContextMenuContent className="w-44">
+      <ContextMenuItem onClick={() => handleOpenNewFileDialog()}>
+        <FilePlus className="mr-2 h-4 w-4" />
+        New File
+      </ContextMenuItem>
+    </ContextMenuContent>
+  ) : null
+
   const headerElement = !hideHeader ? (
     <FileTreeHeader
       filter={filter}
       isLoading={isLoading}
       onFilterChange={handleFilterChange}
+      onCreateFile={worktreePath ? handleOpenNewFileDialog : undefined}
       onRefresh={handleRefresh}
       onCollapseAll={handleCollapseAll}
       onClose={onClose}
@@ -256,6 +397,7 @@ export function FileTree({
             <p className="text-xs mt-1 opacity-75">to view its files</p>
           </div>
         </div>
+        {createFileDialog}
       </div>
     )
   }
@@ -271,6 +413,7 @@ export function FileTree({
             <p className="text-xs mt-1 opacity-75">{error}</p>
           </div>
         </div>
+        {createFileDialog}
       </div>
     )
   }
@@ -289,6 +432,7 @@ export function FileTree({
             <p className="text-sm">Loading files...</p>
           </div>
         </div>
+        {createFileDialog}
       </div>
     )
   }
@@ -304,6 +448,7 @@ export function FileTree({
             <p className="text-sm">No files found</p>
           </div>
         </div>
+        {createFileDialog}
       </div>
     )
   }
@@ -316,6 +461,7 @@ export function FileTree({
           filter={filter}
           isLoading={isLoading}
           onFilterChange={handleFilterChange}
+          onCreateFile={worktreePath ? handleOpenNewFileDialog : undefined}
           onRefresh={handleRefresh}
           onCollapseAll={handleCollapseAll}
           onClose={onClose}
@@ -326,6 +472,7 @@ export function FileTree({
             <p className="text-xs mt-1 opacity-75">{error}</p>
           </div>
         </div>
+        {createFileDialog}
       </div>
     )
   }
@@ -338,6 +485,7 @@ export function FileTree({
           filter={filter}
           isLoading={isLoading}
           onFilterChange={handleFilterChange}
+          onCreateFile={worktreePath ? handleOpenNewFileDialog : undefined}
           onRefresh={handleRefresh}
           onCollapseAll={handleCollapseAll}
           onClose={onClose}
@@ -351,6 +499,7 @@ export function FileTree({
             <p className="text-sm">Loading files...</p>
           </div>
         </div>
+        {createFileDialog}
       </div>
     )
   }
@@ -363,6 +512,7 @@ export function FileTree({
           filter={filter}
           isLoading={isLoading}
           onFilterChange={handleFilterChange}
+          onCreateFile={worktreePath ? handleOpenNewFileDialog : undefined}
           onRefresh={handleRefresh}
           onCollapseAll={handleCollapseAll}
           onClose={onClose}
@@ -373,6 +523,7 @@ export function FileTree({
             <p className="text-sm">No files found</p>
           </div>
         </div>
+        {createFileDialog}
       </div>
     )
   }
@@ -382,52 +533,59 @@ export function FileTree({
   return (
     <div className={cn('flex flex-col h-full', className)} data-testid="file-tree">
       {headerElement}
-      <div
-        ref={parentRef}
-        className="flex-1 overflow-auto py-1"
-        role="tree"
-        aria-label="File tree"
-        data-testid="file-tree-content"
-      >
-        <div
-          style={{
-            height: `${virtualizer.getTotalSize()}px`,
-            width: '100%',
-            position: 'relative'
-          }}
-        >
-          {virtualizer.getVirtualItems().map((virtualRow) => {
-            const { node, depth, isExpanded } = flatNodes[virtualRow.index]
-            return (
-              <div
-                key={node.path}
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  width: '100%',
-                  height: `${virtualRow.size}px`,
-                  transform: `translateY(${virtualRow.start}px)`
-                }}
-              >
-                <VirtualFileTreeNode
-                  node={node}
-                  depth={depth}
-                  isExpanded={isExpanded}
-                  isFiltered={isFiltered}
-                  filter={filter}
-                  onToggle={handleToggle}
-                  onFileClick={onFileClick}
-                  worktreePath={worktreePath}
-                  gitStatusMap={gitStatusMap}
-                  hideGitIndicators={hideGitIndicators}
-                  hideGitContextActions={hideGitContextActions}
-                />
-              </div>
-            )
-          })}
-        </div>
-      </div>
+      <ContextMenu>
+        <ContextMenuTrigger asChild>
+          <div
+            ref={parentRef}
+            className="flex-1 overflow-auto py-1"
+            role="tree"
+            aria-label="File tree"
+            data-testid="file-tree-content"
+          >
+            <div
+              style={{
+                height: `${virtualizer.getTotalSize()}px`,
+                width: '100%',
+                position: 'relative'
+              }}
+            >
+              {virtualizer.getVirtualItems().map((virtualRow) => {
+                const { node, depth, isExpanded } = flatNodes[virtualRow.index]
+                return (
+                  <div
+                    key={node.path}
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      height: `${virtualRow.size}px`,
+                      transform: `translateY(${virtualRow.start}px)`
+                    }}
+                  >
+                    <VirtualFileTreeNode
+                      node={node}
+                      depth={depth}
+                      isExpanded={isExpanded}
+                      isFiltered={isFiltered}
+                      filter={filter}
+                      onToggle={handleToggle}
+                      onFileClick={onFileClick}
+                      onCreateFile={handleOpenNewFileDialog}
+                      worktreePath={worktreePath}
+                      gitStatusMap={gitStatusMap}
+                      hideGitIndicators={hideGitIndicators}
+                      hideGitContextActions={hideGitContextActions}
+                    />
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </ContextMenuTrigger>
+        {fileTreeContextMenu}
+      </ContextMenu>
+      {createFileDialog}
     </div>
   )
 }

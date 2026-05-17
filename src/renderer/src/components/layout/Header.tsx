@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useState, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { isMac } from '@/lib/platform'
 import {
+  PanelLeftClose,
+  PanelLeftOpen,
   PanelRightClose,
   PanelRightOpen,
   History,
@@ -61,7 +63,6 @@ import { useKanbanStore } from '@/stores/useKanbanStore'
 import { useTipStore } from '@/stores/useTipStore'
 import { Tip } from '@/components/ui/Tip'
 import { useFileViewerStore } from '@/stores/useFileViewerStore'
-import { QuickActions } from './QuickActions'
 import { useLifecycleActions } from '@/hooks/useLifecycleActions'
 import { usePinAndActivateSession } from '@/hooks/usePinAndActivateSession'
 import { OctobMark } from '@/components/brand/OctoBMark'
@@ -93,7 +94,8 @@ function isConflictFixActiveStatus(status: string | null): boolean {
 
 export function Header(): React.JSX.Element {
   const { t } = useTranslation()
-  const { rightSidebarCollapsed, toggleRightSidebar } = useLayoutStore()
+  const { leftSidebarCollapsed, rightSidebarCollapsed, toggleLeftSidebar, toggleRightSidebar } =
+    useLayoutStore()
   const { openPanel: openSessionHistory } = useSessionHistoryStore()
   const openSettings = useSettingsStore((s) => s.openSettings)
   const selectedProjectId = useProjectStore((s) => s.selectedProjectId)
@@ -348,6 +350,21 @@ export function Header(): React.JSX.Element {
       {/* Spacer for macOS traffic lights */}
       {isMac() && <div className="w-16 flex-shrink-0" />}
       <div className="flex items-center gap-2 flex-1 min-w-0">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={toggleLeftSidebar}
+          title={leftSidebarCollapsed ? 'Show projects sidebar' : 'Hide projects sidebar'}
+          data-testid="left-sidebar-toggle"
+          className="h-8 w-8 shrink-0"
+          style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+        >
+          {leftSidebarCollapsed ? (
+            <PanelLeftOpen className="h-4 w-4" />
+          ) : (
+            <PanelLeftClose className="h-4 w-4" />
+          )}
+        </Button>
         <OctobMark className="h-5 w-5 shrink-0" />
         {isConnectionMode && selectedConnection ? (
           <span className="text-sm font-medium truncate" data-testid="header-connection-info">
@@ -400,10 +417,6 @@ export function Header(): React.JSX.Element {
             {vimMode === 'normal' ? 'NORMAL' : 'INSERT'}
           </span>
         )}
-      </div>
-      {/* Center: Quick Actions */}
-      <div style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
-        <QuickActions />
       </div>
       {!isConnectionMode && showFixConflictsButton && (
         <div style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>

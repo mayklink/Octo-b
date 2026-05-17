@@ -1,4 +1,4 @@
-import { RefreshCw, ChevronsDownUp, X } from 'lucide-react'
+import { RefreshCw, ChevronsDownUp, FilePlus, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { FileTreeFilter } from './FileTreeFilter'
 import { cn } from '@/lib/utils'
@@ -8,6 +8,7 @@ interface FileTreeHeaderProps {
   filter: string
   isLoading: boolean
   onFilterChange: (value: string) => void
+  onCreateFile?: () => void
   onRefresh: () => void
   onCollapseAll: () => void
   onClose?: () => void
@@ -19,6 +20,7 @@ export function FileTreeHeader({
   filter,
   isLoading,
   onFilterChange,
+  onCreateFile,
   onRefresh,
   onCollapseAll,
   onClose,
@@ -32,6 +34,18 @@ export function FileTreeHeader({
           {title}
         </span>
         <div className="flex items-center gap-0.5">
+          {onCreateFile && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6"
+              onClick={() => onCreateFile()}
+              title="New file"
+              data-testid="file-tree-new-file"
+            >
+              <FilePlus className="h-3.5 w-3.5" />
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="icon"

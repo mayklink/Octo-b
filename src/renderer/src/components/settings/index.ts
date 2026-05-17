@@ -1,1 +1,1 @@
-export { SettingsModal } from './SettingsModal'
+export { SettingsModal, SettingsOpenListener, SettingsView } from './SettingsModal'

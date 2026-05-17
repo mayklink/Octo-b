@@ -80,6 +80,7 @@ interface VirtualFileTreeNodeProps {
   filter: string
   onToggle: (path: string) => void
   onFileClick?: (node: FileTreeNode) => void
+  onCreateFile?: (initialPath?: string) => void
   worktreePath: string
   gitStatusMap: Map<string, GitFileStatus>
   hideGitIndicators?: boolean
@@ -94,6 +95,7 @@ export const VirtualFileTreeNode = memo(function VirtualFileTreeNode({
   filter,
   onToggle,
   onFileClick,
+  onCreateFile,
   worktreePath,
   gitStatusMap,
   hideGitIndicators,
@@ -129,9 +131,11 @@ export const VirtualFileTreeNode = memo(function VirtualFileTreeNode({
       )}
       style={{ paddingLeft: `${depth * 12 + 4}px` }}
       onClick={handleClick}
+      onContextMenu={(event) => event.stopPropagation()}
       onKeyDown={handleKeyDown}
       tabIndex={0}
       role="treeitem"
+      data-file-tree-node="true"
       aria-expanded={node.isDirectory ? isExpanded : undefined}
       aria-selected={false}
       aria-label={`${node.isSymlink ? 'Symlinked ' : ''}${node.isDirectory ? 'Folder' : 'File'}: ${node.name}${gitStatus ? `, ${gitStatus.staged ? 'staged' : 'modified'}` : ''}`}
@@ -190,6 +194,7 @@ export const VirtualFileTreeNode = memo(function VirtualFileTreeNode({
       worktreePath={worktreePath}
       gitStatus={gitStatus?.status}
       staged={gitStatus?.staged}
+      onCreateFile={onCreateFile}
       hideGitContextActions={hideGitContextActions}
     >
       <ContextMenuTrigger asChild>{nodeContent}</ContextMenuTrigger>

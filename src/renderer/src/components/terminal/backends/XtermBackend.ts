@@ -346,6 +346,12 @@ export class XtermBackend implements TerminalBackend {
     return lines.join('\n').trimEnd()
   }
 
+  getSelectionForCopy(): string {
+    const terminal = this.terminal
+    if (!terminal?.hasSelection()) return ''
+    return terminal.getSelection()
+  }
+
   updateTheme(): void {
     if (this.terminal) {
       this.terminal.options.theme = buildTheme(this.ghosttyConfig)

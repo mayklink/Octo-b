@@ -10,6 +10,7 @@ import {
 import {
   GitBranch,
   FileCode,
+  FilePlus,
   FolderOpen,
   Copy,
   Trash2,
@@ -36,6 +37,7 @@ interface FileContextMenuProps {
   gitStatus?: GitStatusCode
   staged?: boolean
   onClose?: () => void
+  onCreateFile?: (initialPath?: string) => void
   hideGitContextActions?: boolean
 }
 
@@ -46,6 +48,7 @@ export function FileContextMenu({
   gitStatus,
   staged,
   onClose,
+  onCreateFile,
   hideGitContextActions
 }: FileContextMenuProps): React.JSX.Element {
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false)
@@ -111,6 +114,14 @@ export function FileContextMenu({
     onClose?.()
   }, [onClose])
 
+  const handleCreateFile = useCallback(() => {
+    const basePath = node.isDirectory
+      ? node.relativePath
+      : node.relativePath.split('/').slice(0, -1).join('/')
+    onCreateFile?.(basePath ? `${basePath}/` : '')
+    onClose?.()
+  }, [node.isDirectory, node.relativePath, onCreateFile, onClose])
+
   // Determine which git actions to show
   const showStage = !hideGitContextActions && gitStatus && !staged && gitStatus !== 'C'
   const showUnstage = !hideGitContextActions && staged
@@ -166,6 +177,15 @@ export function FileContextMenu({
           )}
 
           {/* File actions */}
+          {onCreateFile && (
+            <>
+              <ContextMenuItem onClick={handleCreateFile}>
+                <FilePlus className="mr-2 h-4 w-4" />
+                New File
+              </ContextMenuItem>
+              <ContextMenuSeparator />
+            </>
+          )}
           <ContextMenuItem onClick={handleOpenInEditor}>
             <FileCode className="mr-2 h-4 w-4" />
             Open in Editor
