@@ -8,6 +8,7 @@ import {
   PanelRightOpen,
   History,
   Settings,
+  Server,
   AlertTriangle,
   Loader2,
   GitPullRequest,
@@ -998,6 +999,17 @@ export function Header(): React.JSX.Element {
           data-testid="session-history-toggle"
         >
           <History className="h-4 w-4" />
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => openSettings('mcp')}
+          title="MCP servers"
+          data-testid="mcp-settings-toggle"
+          className="h-8 gap-1.5 px-2 text-xs"
+        >
+          <Server className="h-3.5 w-3.5" />
+          MCP
         </Button>
         <Tip tipId="settings-default-provider" enabled={nonDefaultProviderChosen}>
           <Button

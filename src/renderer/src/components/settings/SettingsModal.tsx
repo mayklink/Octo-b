@@ -12,6 +12,7 @@ import {
   Wrench,
   Sparkles,
   Plug,
+  Server,
   Bug,
   ClipboardList,
   FileSearch,
@@ -27,6 +28,7 @@ import { SettingsShortcuts } from './SettingsShortcuts'
 import { SettingsSecurity } from './SettingsSecurity'
 import { SettingsPrivacy } from './SettingsPrivacy'
 import { SettingsIntegrations } from './SettingsIntegrations'
+import { SettingsMcp } from './SettingsMcp'
 import { SettingsAdvanced } from './SettingsAdvanced'
 import { SettingsPet } from './SettingsPet'
 import { SettingsTaskPrompts } from './SettingsTaskPrompts'
@@ -43,6 +45,7 @@ type SettingsSectionId =
   | 'editor'
   | 'terminal'
   | 'integrations'
+  | 'mcp'
   | 'security'
   | 'privacy'
   | 'shortcuts'
@@ -66,6 +69,7 @@ function useSettingsSections(): ReadonlyArray<{ id: SettingsSectionId; label: st
         { id: 'editor' as const, label: t('settings.nav.editor'), icon: Code },
         { id: 'terminal' as const, label: t('settings.nav.terminal'), icon: Terminal },
         { id: 'integrations' as const, label: t('settings.nav.integrations'), icon: Plug },
+        { id: 'mcp' as const, label: t('settings.nav.mcp'), icon: Server },
         { id: 'security' as const, label: t('settings.nav.security'), icon: Shield },
         { id: 'privacy' as const, label: t('settings.nav.privacy'), icon: Eye },
         { id: 'shortcuts' as const, label: t('settings.nav.shortcuts'), icon: Keyboard },
@@ -146,6 +150,7 @@ export function SettingsView(): React.JSX.Element {
           {activeSection === 'editor' && <SettingsEditor />}
           {activeSection === 'terminal' && <SettingsTerminal />}
           {activeSection === 'integrations' && <SettingsIntegrations />}
+          {activeSection === 'mcp' && <SettingsMcp />}
           {activeSection === 'security' && <SettingsSecurity />}
           {activeSection === 'privacy' && <SettingsPrivacy />}
           {activeSection === 'shortcuts' && <SettingsShortcuts />}
