@@ -219,6 +219,54 @@ export const useScriptStore = create<ScriptStore>((set, get) => ({
   }
 }))
 
+function replayRunOutputEvent(worktreeId: string, event: ScriptOutputEvent): boolean {
+  const s = useScriptStore.getState()
+  switch (event.type) {
+    case 'command-start':
+      s.appendRunOutput(worktreeId, `\x00CMD:${event.command}`)
+      return false
+    case 'output':
+      if (event.data) {
+        const lines = event.data.split('\n')
+        for (const line of lines) {
+          if (line !== '') s.appendRunOutput(worktreeId, line)
+        }
+      }
+      return false
+    case 'long-running':
+      s.appendRunOutput(
+        worktreeId,
+        `\x00NOTICE:Command is taking longer than expected (${event.elapsed}ms): ${event.command}`
+      )
+      return false
+    case 'error':
+      s.appendRunOutput(worktreeId, `\x00ERR:Process exited with code ${event.exitCode}`)
+      s.setRunRunning(worktreeId, false)
+      s.setRunPid(worktreeId, null)
+      return true
+    case 'done':
+      s.setRunRunning(worktreeId, false)
+      s.setRunPid(worktreeId, null)
+      return true
+  }
+}
+
+export async function hydrateRunScriptOutput(worktreeId: string): Promise<void> {
+  const buffer = getOrCreateBuffer(worktreeId)
+  const state = await window.scriptOps.getRunState(worktreeId)
+  const store = useScriptStore.getState()
+
+  if (buffer.count === 0 && state.events.length > 0) {
+    store.clearRunOutput(worktreeId)
+    for (const event of state.events) {
+      replayRunOutputEvent(worktreeId, event)
+    }
+  }
+
+  store.setRunRunning(worktreeId, state.running)
+  store.setRunPid(worktreeId, state.pid)
+}
+
 /** Fire-and-forget: run project script for a worktree, subscribing to output events
  *  so output is captured even when RunTab is showing a different worktree. */
 export function fireRunScript(worktreeId: string, commands: string[], cwd: string): void {
@@ -231,36 +279,9 @@ export function fireRunScript(worktreeId: string, commands: string[], cwd: strin
 
   const channel = `script:run:${worktreeId}`
   const unsub = window.scriptOps.onOutput(channel, (event) => {
-    const s = useScriptStore.getState()
-    switch (event.type) {
-      case 'command-start':
-        s.appendRunOutput(worktreeId, `\x00CMD:${event.command}`)
-        break
-      case 'output':
-        if (event.data) {
-          const lines = event.data.split('\n')
-          for (const line of lines) {
-            if (line !== '') s.appendRunOutput(worktreeId, line)
-          }
-        }
-        break
-      case 'long-running':
-        // Show notification in output as a special marker (not mixed with actual output)
-        s.appendRunOutput(worktreeId, `\x00NOTICE:Command is taking longer than expected (${event.elapsed}ms): ${event.command}`)
-        break
-      case 'error':
-        s.appendRunOutput(worktreeId, `\x00ERR:Process exited with code ${event.exitCode}`)
-        s.setRunRunning(worktreeId, false)
-        s.setRunPid(worktreeId, null)
-        runSubscriptions.delete(worktreeId)
-        unsub()
-        break
-      case 'done':
-        s.setRunRunning(worktreeId, false)
-        s.setRunPid(worktreeId, null)
-        runSubscriptions.delete(worktreeId)
-        unsub()
-        break
+    if (replayRunOutputEvent(worktreeId, event)) {
+      runSubscriptions.delete(worktreeId)
+      unsub()
     }
   })
 

@@ -198,7 +198,20 @@ export const settings = {
       'You will receive early builds with the latest features. These may contain bugs.',
     stableInfo: 'You will receive stable, tested releases.',
     checkWaiting: 'Checking...',
-    checkButton: 'Check for Updates'
+    checkButton: 'Check for Updates',
+    loadingVersion: 'Loading version...',
+    unknownVersion: 'unknown version',
+    statusIdle: 'No update check has run in this session.',
+    statusChecking: 'Checking for updates...',
+    statusAvailable: 'Update available: {{version}}',
+    statusNotAvailable: 'You are already using the latest version.',
+    statusDownloading: 'Downloading update: {{percent}}',
+    statusDownloaded: 'Update {{version}} downloaded and ready to install.',
+    statusError: 'Unable to check for updates.',
+    downloadButton: 'Download Update',
+    installButton: 'Install and Restart',
+    toastAvailable: 'Update available: {{version}}',
+    toastNotAvailable: 'You are already on the latest version'
   },
   security: {
     heading: 'Security',

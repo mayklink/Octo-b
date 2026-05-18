@@ -2026,8 +2026,11 @@ export class DatabaseService {
     const values: (string | number | null)[] = [new Date().toISOString()]
 
     if (data.title !== undefined) {
+      if (typeof data.title !== 'string' || data.title.trim().length === 0) {
+        throw new Error('Kanban ticket title must be a non-empty string')
+      }
       updates.push('title = ?')
-      values.push(data.title)
+      values.push(data.title.trim())
     }
     if (data.description !== undefined) {
       updates.push('description = ?')

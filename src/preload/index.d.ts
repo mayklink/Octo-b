@@ -1016,6 +1016,11 @@ declare global {
         success: boolean
         error?: string
       }>
+      getRunState: (worktreeId: string) => Promise<{
+        events: ScriptOutputEvent[]
+        running: boolean
+        pid: number | null
+      }>
       runArchive: (
         commands: string[],
         cwd: string
@@ -1711,10 +1716,11 @@ declare global {
 
   // Script output event type
   interface ScriptOutputEvent {
-    type: 'command-start' | 'output' | 'error' | 'done'
+    type: 'command-start' | 'output' | 'error' | 'done' | 'long-running'
     command?: string
     data?: string
     exitCode?: number
+    elapsed?: number
   }
 
   // OpenCode command type (slash commands)
