@@ -52,6 +52,8 @@ interface BoardAssistantViewProps {
   projectId: string
 }
 
+const EMPTY_KANBAN_TICKETS: KanbanTicket[] = []
+
 const BOARD_ASSISTANT_RULES = [
   'You are Octob Board Assistant.',
   'Help the user understand, refine, validate, diagram, and create local kanban tickets for the current board scope.',
@@ -1535,7 +1537,9 @@ export function BoardAssistantView({ projectId }: BoardAssistantViewProps): Reac
   const canInteract = scope !== null && scope.kind !== 'pinned'
   const hasInvalidDrafts = drafts.some((draft) => draft.validationIssues.length > 0)
   const targetProjectTickets = useKanbanStore((state) =>
-    selectedTargetProjectId ? state.tickets.get(selectedTargetProjectId) ?? [] : []
+    selectedTargetProjectId
+      ? state.tickets.get(selectedTargetProjectId) ?? EMPTY_KANBAN_TICKETS
+      : EMPTY_KANBAN_TICKETS
   )
   const ticketsById = useMemo(() => {
     const map = new Map<string, KanbanTicket>()

@@ -41,6 +41,12 @@ function normalizeNullableString(value: unknown): string | null | undefined {
   return value.trim() ? value.trim() : null
 }
 
+function normalizeRequiredString(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const trimmed = value.trim()
+  return trimmed ? trimmed : undefined
+}
+
 export function parseBoardTicketActionSet(content: string): ParsedBoardTicketActionSet | null {
   const match = content.match(BOARD_ACTION_BLOCK_CAPTURE_RE)
   if (!match?.[1]) return null
@@ -62,7 +68,7 @@ export function parseBoardTicketActionSet(content: string): ParsedBoardTicketAct
         const validationIssues: string[] = []
         const ticketId = normalizeNullableString(record.ticketId) ?? null
         const projectId = normalizeNullableString(record.projectId) ?? null
-        const title = normalizeNullableString(record.title)
+        const title = normalizeRequiredString(record.title)
         const description = normalizeNullableString(record.description)
         const rawColumn = normalizeNullableString(record.column)
         const rawMode = normalizeNullableString(record.mode)
@@ -80,6 +86,9 @@ export function parseBoardTicketActionSet(content: string): ParsedBoardTicketAct
         }
         seenKeys.add(actionKey)
 
+        if (record.title !== undefined && !title) {
+          validationIssues.push('Title must be a non-empty string.')
+        }
         if (type === 'create' && !projectId) {
           validationIssues.push('Create action is missing projectId.')
         }

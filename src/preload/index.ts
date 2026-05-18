@@ -1608,10 +1608,11 @@ const opencodeOps = {
 
 // Script operations API
 interface ScriptOutputEvent {
-  type: 'command-start' | 'output' | 'error' | 'done'
+  type: 'command-start' | 'output' | 'error' | 'done' | 'long-running'
   command?: string
   data?: string
   exitCode?: number
+  elapsed?: number
 }
 
 const scriptOps = {
@@ -1634,6 +1635,11 @@ const scriptOps = {
   // Kill a running project script
   kill: (worktreeId: string): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke('script:kill', { worktreeId }),
+
+  getRunState: (
+    worktreeId: string
+  ): Promise<{ events: ScriptOutputEvent[]; running: boolean; pid: number | null }> =>
+    ipcRenderer.invoke('script:getRunState', { worktreeId }),
 
   // Run archive script (non-interactive, captures output)
   runArchive: (

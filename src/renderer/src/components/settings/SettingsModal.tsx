@@ -15,6 +15,7 @@ import {
   Server,
   Bug,
   ClipboardList,
+  RefreshCw,
   FileSearch,
   X
 } from 'lucide-react'
@@ -31,6 +32,7 @@ import { SettingsIntegrations } from './SettingsIntegrations'
 import { SettingsMcp } from './SettingsMcp'
 import { SettingsAdvanced } from './SettingsAdvanced'
 import { SettingsPet } from './SettingsPet'
+import { SettingsUpdates } from './SettingsUpdates'
 import { SettingsTaskPrompts } from './SettingsTaskPrompts'
 import { SettingsCodeReviewPrompts } from './SettingsCodeReviewPrompts'
 import { cn } from '@/lib/utils'
@@ -46,6 +48,7 @@ type SettingsSectionId =
   | 'terminal'
   | 'integrations'
   | 'mcp'
+  | 'updates'
   | 'security'
   | 'privacy'
   | 'shortcuts'
@@ -70,6 +73,7 @@ function useSettingsSections(): ReadonlyArray<{ id: SettingsSectionId; label: st
         { id: 'terminal' as const, label: t('settings.nav.terminal'), icon: Terminal },
         { id: 'integrations' as const, label: t('settings.nav.integrations'), icon: Plug },
         { id: 'mcp' as const, label: t('settings.nav.mcp'), icon: Server },
+        { id: 'updates' as const, label: t('settings.nav.updates'), icon: RefreshCw },
         { id: 'security' as const, label: t('settings.nav.security'), icon: Shield },
         { id: 'privacy' as const, label: t('settings.nav.privacy'), icon: Eye },
         { id: 'shortcuts' as const, label: t('settings.nav.shortcuts'), icon: Keyboard },
@@ -151,6 +155,7 @@ export function SettingsView(): React.JSX.Element {
           {activeSection === 'terminal' && <SettingsTerminal />}
           {activeSection === 'integrations' && <SettingsIntegrations />}
           {activeSection === 'mcp' && <SettingsMcp />}
+          {activeSection === 'updates' && <SettingsUpdates />}
           {activeSection === 'security' && <SettingsSecurity />}
           {activeSection === 'privacy' && <SettingsPrivacy />}
           {activeSection === 'shortcuts' && <SettingsShortcuts />}

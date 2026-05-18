@@ -20,7 +20,7 @@ interface RunAndWaitResult {
   error?: string
 }
 
-interface ScriptEvent {
+export interface ScriptEvent {
   type: 'command-start' | 'output' | 'error' | 'done' | 'long-running'
   command?: string
   data?: string
@@ -42,10 +42,12 @@ export class ScriptRunner {
   private runningProcesses: Map<string, ChildProcess> = new Map()
   private outputBuffers: Map<string, string> = new Map()
   private outputFlushTimers: Map<string, NodeJS.Timeout> = new Map()
+  private eventHistory: Map<string, ScriptEvent[]> = new Map()
   private totalOpened = 0
   private totalClosed = 0
 
   private static readonly OUTPUT_FLUSH_MS = 16
+  private static readonly MAX_HISTORY_EVENTS = 5_000
 
   private isCurrentProcess(eventKey: string, proc: ChildProcess): boolean {
     return this.runningProcesses.get(eventKey) === proc
@@ -140,7 +142,21 @@ export class ScriptRunner {
     this.mainWindow = window
   }
 
+  private resetEventHistory(eventKey: string): void {
+    this.eventHistory.set(eventKey, [])
+  }
+
+  private rememberEvent(eventKey: string, event: ScriptEvent): void {
+    const history = this.eventHistory.get(eventKey) ?? []
+    history.push(event)
+    if (history.length > ScriptRunner.MAX_HISTORY_EVENTS) {
+      history.splice(0, history.length - ScriptRunner.MAX_HISTORY_EVENTS)
+    }
+    this.eventHistory.set(eventKey, history)
+  }
+
   private sendEvent(eventKey: string, event: ScriptEvent): void {
+    this.rememberEvent(eventKey, event)
     if (!this.mainWindow || this.mainWindow.isDestroyed()) return
     this.mainWindow.webContents.send(eventKey, event)
   }
@@ -193,6 +209,7 @@ export class ScriptRunner {
     extraEnv?: Record<string, string>
   ): Promise<SequentialResult> {
     const parsed = this.parseCommands(commands)
+    this.resetEventHistory(eventKey)
     log.info('runSequential starting', { commandCount: parsed.length, cwd, eventKey })
 
     for (const command of parsed) {
@@ -301,7 +318,9 @@ export class ScriptRunner {
 
     const parsed = this.parseCommands(commands)
     const combined = parsed.join(' && ')
+    this.resetEventHistory(eventKey)
     log.info('runPersistent starting', { commandCount: parsed.length, cwd, eventKey })
+    this.sendEvent(eventKey, { type: 'command-start', command: combined })
 
     const proc = spawn('sh', ['-c', combined], {
       cwd,
@@ -516,6 +535,19 @@ export class ScriptRunner {
       totalOpened: this.totalOpened,
       totalClosed: this.totalClosed
     }
+  }
+
+  getEventHistory(eventKey: string): ScriptEvent[] {
+    return [...(this.eventHistory.get(eventKey) ?? [])]
+  }
+
+  isRunning(eventKey: string): boolean {
+    const proc = this.runningProcesses.get(eventKey)
+    return !!proc && proc.exitCode === null && proc.signalCode === null
+  }
+
+  getPid(eventKey: string): number | null {
+    return this.runningProcesses.get(eventKey)?.pid ?? null
   }
 
   killAll(): void {

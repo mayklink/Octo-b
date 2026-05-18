@@ -205,7 +205,20 @@ export const settings = {
       'Você receberá builds antecipados com os recursos mais novos. Podem ter bugs.',
     stableInfo: 'Você receberá releases estáveis e testadas.',
     checkWaiting: 'Verificando...',
-    checkButton: 'Buscar atualizações'
+    checkButton: 'Buscar atualizações',
+    loadingVersion: 'Carregando versão...',
+    unknownVersion: 'versão desconhecida',
+    statusIdle: 'Nenhuma busca realizada nesta sessão.',
+    statusChecking: 'Buscando atualizações...',
+    statusAvailable: 'Atualização disponível: {{version}}',
+    statusNotAvailable: 'Você já está usando a versão mais recente.',
+    statusDownloading: 'Baixando atualização: {{percent}}',
+    statusDownloaded: 'Atualização {{version}} baixada e pronta para instalar.',
+    statusError: 'Não foi possível buscar atualizações.',
+    downloadButton: 'Baixar atualização',
+    installButton: 'Instalar e reiniciar',
+    toastAvailable: 'Atualização disponível: {{version}}',
+    toastNotAvailable: 'Você já está na versão mais recente'
   },
   security: {
     heading: 'Segurança',

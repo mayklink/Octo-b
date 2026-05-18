@@ -110,6 +110,15 @@ export function registerScriptHandlers(mainWindow: BrowserWindow): void {
     }
   })
 
+  ipcMain.handle('script:getRunState', async (_event, { worktreeId }: { worktreeId: string }) => {
+    const eventKey = `script:run:${worktreeId}`
+    return {
+      events: scriptRunner.getEventHistory(eventKey),
+      running: scriptRunner.isRunning(eventKey),
+      pid: scriptRunner.getPid(eventKey)
+    }
+  })
+
   // Run archive script (non-interactive, captures output)
   ipcMain.handle(
     'script:runArchive',

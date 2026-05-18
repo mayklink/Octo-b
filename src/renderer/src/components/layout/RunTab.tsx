@@ -2,7 +2,12 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { Play, Square, RotateCcw, Trash2, Settings } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { useScriptStore, fireRunScript, killRunScript } from '@/stores/useScriptStore'
+import {
+  useScriptStore,
+  fireRunScript,
+  hydrateRunScriptOutput,
+  killRunScript
+} from '@/stores/useScriptStore'
 import { useProjectStore } from '@/stores/useProjectStore'
 import { useWorktreeStore } from '@/stores/useWorktreeStore'
 import { getOrCreateBuffer } from '@/lib/output-ring-buffer'
@@ -45,6 +50,11 @@ export function RunTab({ worktreeId }: RunTabProps): React.JSX.Element {
   const [assignedPort, setAssignedPort] = useState<number | null>(null)
 
   const { clearRunOutput } = useScriptStore.getState()
+
+  useEffect(() => {
+    if (!worktreeId) return
+    void hydrateRunScriptOutput(worktreeId)
+  }, [worktreeId])
 
   // --- Smart auto-scroll ---
   const isAtBottomRef = useRef(true)

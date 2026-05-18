@@ -29,14 +29,14 @@ if $AUTO_YES; then
   warn "Auto-accepting all prompts (-y)"
 fi
 if $SKIP_FINALIZE; then
-  warn "Finalize job will be skipped (release stays as draft)"
+  warn "--no-finalize is ignored by the GitHub tag workflow; release-app.yml controls draft publishing"
 fi
 
 # ── Constants ─────────────────────────────────────────────────────
-REPO="morapelker/octob"
+REPO="mayklink/Octo-b"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-WORKFLOW_FILE="release-github.yml"
+WORKFLOW_FILE="release-app.yml"
 
 # ── Preflight ────────────────────────────────────────────────────
 info "Running preflight checks..."
@@ -105,9 +105,8 @@ info "Will release: ${YELLOW}v${CURRENT_VERSION}${NC} → ${GREEN}v${NEW_VERSION
 info "This will:"
 echo "  1. Bump package.json to ${NEW_VERSION}"
 echo "  2. Commit, tag v${NEW_VERSION}, and push to origin"
-echo "  3. Trigger GitHub Actions to build macOS, Windows, and Linux"
-echo "  4. Publish all artifacts to GitHub Release v${NEW_VERSION}"
-echo "  5. Update Homebrew cask (official + custom tap, automated in CI)"
+echo "  3. Push tag v${NEW_VERSION} so GitHub Actions publishes updater assets"
+echo "  4. Publish GitHub Release v${NEW_VERSION}"
 echo ""
 if ! $AUTO_YES; then
  read -rp "Proceed? [Y/n] " confirm
@@ -135,17 +134,12 @@ git push origin "$CURRENT_BRANCH"
 git push origin "v${NEW_VERSION}"
 ok "Pushed commit and tag"
 
-# ── Trigger CI workflow ──────────────────────────────────────────
-info "Triggering CI workflow..."
-if $SKIP_FINALIZE; then
-  gh workflow run "$WORKFLOW_FILE" --ref "v${NEW_VERSION}" -f skip_finalize=true
-else
-  gh workflow run "$WORKFLOW_FILE" --ref "v${NEW_VERSION}"
-fi
+# ── GitHub Actions ───────────────────────────────────────────────
+info "Waiting for GitHub Actions to pick up tag v${NEW_VERSION}..."
 
 # Brief pause to let GitHub register the run
 sleep 3
-RUN_URL=$(gh run list --workflow="$WORKFLOW_FILE" --limit=1 --json url --jq '.[0].url')
+RUN_URL=$(gh run list --workflow="$WORKFLOW_FILE" --branch "v${NEW_VERSION}" --limit=1 --json url --jq '.[0].url')
 
 # ── Summary ──────────────────────────────────────────────────────
 echo ""
@@ -156,15 +150,8 @@ echo ""
 echo "  Workflow run: ${RUN_URL:-"(check GitHub Actions)"}"
 echo ""
 echo "  Builds will run on GitHub-hosted runners:"
-echo "    - macOS (arm64 + x64) — sign + notarize"
-echo "    - Windows (x64)       — NSIS installer + portable"
-echo "    - Linux (x64)         — AppImage + deb + tar.gz"
+echo "    - Windows (x64) — NSIS installer + latest.yml auto-updater metadata"
 echo ""
-if $SKIP_FINALIZE; then
-  echo "  The release will remain as a DRAFT (--no-finalize)."
-  echo "  When ready, run: yarn release:finalize ${NEW_VERSION}"
-else
-  echo "  The release will be un-drafted automatically when all builds complete."
-fi
+echo "  The release will be published automatically when the workflow completes."
 echo "  GitHub Release: https://github.com/${REPO}/releases/tag/v${NEW_VERSION}"
 echo ""

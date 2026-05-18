@@ -114,6 +114,17 @@ describeIf('Session 1: Kanban Ticket Note', () => {
     expect(fetched.title).toBe('new title')
     expect(fetched.note).toBe('keep me')
   })
+
+  test('updateKanbanTicket rejects null or blank titles before SQLite constraints', () => {
+    const project = db.createProject({ name: 'Title Guard Test', path: '/title-guard' })
+    const ticket = db.createKanbanTicket({ project_id: project.id, title: 'Keep title' })
+
+    expect(() => db.updateKanbanTicket(ticket.id, { title: null })).toThrow(/title/i)
+    expect(() => db.updateKanbanTicket(ticket.id, { title: '   ' })).toThrow(/title/i)
+
+    const fetched = db.getKanbanTicket(ticket.id)
+    expect(fetched.title).toBe('Keep title')
+  })
 })
 
 // Show information when tests are skipped
