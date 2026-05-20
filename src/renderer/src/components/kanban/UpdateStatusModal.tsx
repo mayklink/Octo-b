@@ -1,5 +1,9 @@
 import { useState, useEffect } from 'react'
-import { getProviderSettings } from '@/lib/provider-settings'
+import {
+  getProjectProviderSettings,
+  getProviderSettings,
+  loadProjectProviderSettingsFromDatabase
+} from '@/lib/provider-settings'
 import { getProviderLabel } from '@/components/ui/provider-icon'
 import { Loader2, RefreshCw } from 'lucide-react'
 import {
@@ -15,6 +19,7 @@ interface UpdateStatusModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   externalProvider: string
+  projectId: string
   externalId: string
   externalUrl: string
   ticketTitle: string
@@ -42,10 +47,19 @@ function resolveTicketImportRepo(
   return null
 }
 
+function hasAzureDevOpsConfig(settings: Record<string, string>): boolean {
+  return Boolean(
+    settings.azure_devops_organization?.trim() &&
+      settings.azure_devops_project?.trim() &&
+      settings.azure_devops_pat?.trim()
+  )
+}
+
 export function UpdateStatusModal({
   open,
   onOpenChange,
   externalProvider,
+  projectId,
   externalId,
   externalUrl,
   ticketTitle
@@ -53,31 +67,59 @@ export function UpdateStatusModal({
   const [statuses, setStatuses] = useState<Array<{ id: string; label: string }>>([])
   const [loading, setLoading] = useState(false)
   const [updating, setUpdating] = useState(false)
+  const [settings, setSettings] = useState<Record<string, string>>({})
+  const [repo, setRepo] = useState<string | null>(null)
 
-  const settings = getProviderSettings()
-  const repo = resolveTicketImportRepo(externalProvider, externalUrl, settings)
   const providerLabel = getProviderLabel(externalProvider)
 
   useEffect(() => {
     if (!open) return
-    const freshSettings = getProviderSettings()
-    const resolvedRepo = resolveTicketImportRepo(externalProvider, externalUrl, freshSettings)
-    if (!resolvedRepo) {
-      setStatuses([])
-      setLoading(false)
-      return
-    }
+    let cancelled = false
 
     setLoading(true)
-    window.ticketImport
-      .getAvailableStatuses(externalProvider, resolvedRepo, externalId, freshSettings)
-      .then(setStatuses)
-      .catch((err) => {
-        toast.error(`Failed to fetch statuses: ${err instanceof Error ? err.message : String(err)}`)
+    void (async () => {
+      let freshSettings = getProviderSettings()
+      if (externalProvider === 'azure_devops') {
+        const projectSettings = {
+          ...getProjectProviderSettings(projectId),
+          ...((await loadProjectProviderSettingsFromDatabase(projectId)) ?? {})
+        }
+        if (hasAzureDevOpsConfig(projectSettings)) {
+          freshSettings = projectSettings
+        }
+      }
+
+      const resolvedRepo = resolveTicketImportRepo(externalProvider, externalUrl, freshSettings)
+      if (cancelled) return
+      setSettings(freshSettings)
+      setRepo(resolvedRepo)
+
+      if (!resolvedRepo) {
         setStatuses([])
-      })
-      .finally(() => setLoading(false))
-  }, [open, externalProvider, externalId, externalUrl])
+        setLoading(false)
+        return
+      }
+
+      window.ticketImport
+        .getAvailableStatuses(externalProvider, resolvedRepo, externalId, freshSettings)
+        .then((nextStatuses) => {
+          if (!cancelled) setStatuses(nextStatuses)
+        })
+        .catch((err) => {
+          if (!cancelled) {
+            toast.error(`Failed to fetch statuses: ${err instanceof Error ? err.message : String(err)}`)
+            setStatuses([])
+          }
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false)
+        })
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [open, externalProvider, externalId, externalUrl, projectId])
 
   const handleUpdate = async (statusId: string) => {
     if (!repo) return
@@ -89,7 +131,7 @@ export function UpdateStatusModal({
         repo,
         externalId,
         statusId,
-        getProviderSettings()
+        settings
       )
       if (result.success) {
         toast.success(`Updated #${externalId} to "${statuses.find((s) => s.id === statusId)?.label}"`)
@@ -120,8 +162,8 @@ export function UpdateStatusModal({
         <div className="flex flex-col gap-2 py-2">
           {!repo && (
             <p className="text-xs text-muted-foreground px-1">
-              Connect this provider under Settings → Integrations, or open the ticket from a linked URL
-              so the board can resolve the remote project.
+              Configure este provider no importador do projeto, ou abra o ticket a partir de uma URL
+              vinculada para o board resolver o projeto remoto.
             </p>
           )}
           {loading ? (

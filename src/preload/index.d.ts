@@ -1676,6 +1676,7 @@ declare global {
         statusId: string,
         settings: Record<string, string>
       ) => Promise<{ success: boolean; error?: string }>
+      azureDevOpsListProjects: (settings: Record<string, string>) => Promise<string[]>
       azureDevOpsListStates: (settings: Record<string, string>) => Promise<string[]>
       azureDevOpsListWorkItemTypes: (settings: Record<string, string>) => Promise<string[]>
       azureDevOpsSearchUsers: (

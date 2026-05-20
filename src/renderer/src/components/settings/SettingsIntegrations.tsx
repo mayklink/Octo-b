@@ -34,9 +34,10 @@ export function SettingsIntegrations(): React.JSX.Element {
 
   useEffect(() => {
     window.ticketImport.listProviders().then(async (provs) => {
-      setProviders(provs)
+      const globalProviders = provs.filter((p) => p.id !== 'azure_devops')
+      setProviders(globalProviders)
       const schemaMap: Record<string, SettingsFieldDef[]> = {}
-      for (const p of provs) {
+      for (const p of globalProviders) {
         schemaMap[p.id] = await window.ticketImport.getSettingsSchema(p.id)
       }
       setSchemas(schemaMap)
@@ -46,11 +47,8 @@ export function SettingsIntegrations(): React.JSX.Element {
         const raw = localStorage.getItem('octob-provider-settings')
         if (raw) {
           const parsed = JSON.parse(raw) as Record<string, string>
-          for (const fields of Object.values(schemaMap)) {
-            for (const field of fields) {
-              const val = parsed[field.key]
-              if (typeof val === 'string') saved[field.key] = val
-            }
+          for (const [key, val] of Object.entries(parsed)) {
+            if (typeof val === 'string') saved[key] = val
           }
           setValues(saved)
         }
@@ -62,11 +60,8 @@ export function SettingsIntegrations(): React.JSX.Element {
         const dbSettings = await loadProviderSettingsFromDatabase()
         if (dbSettings) {
           const merged = { ...saved }
-          for (const fields of Object.values(schemaMap)) {
-            for (const field of fields) {
-              const dbVal = dbSettings[field.key]
-              if (typeof dbVal === 'string') merged[field.key] = dbVal
-            }
+          for (const [key, val] of Object.entries(dbSettings)) {
+            if (typeof val === 'string') merged[key] = val
           }
           setValues(merged)
           localStorage.setItem('octob-provider-settings', JSON.stringify(merged))

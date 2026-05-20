@@ -134,6 +134,15 @@ export function registerTicketImportHandlers(): void {
   )
 
   ipcMain.handle(
+    'ticketImport:azureDevOpsListProjects',
+    async (_event, settings: Record<string, string>) => {
+      const raw = getTicketProviderManager().getProvider('azure_devops')
+      if (!(raw instanceof AzureDevOpsProvider)) return []
+      return raw.listProjectNames(settings)
+    }
+  )
+
+  ipcMain.handle(
     'ticketImport:azureDevOpsListWorkItemTypes',
     async (_event, settings: Record<string, string>) => {
       const raw = getTicketProviderManager().getProvider('azure_devops')
