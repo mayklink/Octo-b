@@ -2116,6 +2116,8 @@ const ticketImport = {
     settings: Record<string, string>
   ): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke('ticketImport:updateRemoteStatus', providerId, repo, externalId, statusId, settings),
+  azureDevOpsListProjects: (settings: Record<string, string>): Promise<string[]> =>
+    ipcRenderer.invoke('ticketImport:azureDevOpsListProjects', settings),
   azureDevOpsListStates: (settings: Record<string, string>): Promise<string[]> =>
     ipcRenderer.invoke('ticketImport:azureDevOpsListStates', settings),
   azureDevOpsListWorkItemTypes: (settings: Record<string, string>): Promise<string[]> =>

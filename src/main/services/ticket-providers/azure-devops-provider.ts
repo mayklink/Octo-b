@@ -37,25 +37,38 @@ function mapAzureState(stateRaw: string | undefined): RemoteIssue['state'] {
   return 'open'
 }
 
-function prepareWiql(wiql: string, minExclusiveId: number | null): string {
+function escapeWiqlStringLiteral(value: string): string {
+  return value.replace(/'/g, "''")
+}
+
+function appendWiqlCondition(wiql: string, condition: string): string {
+  const orderByMatch = wiql.match(/\s+ORDER\s+BY\s+/i)
+  let mainPart = wiql
+  let orderPart = ''
+  if (orderByMatch?.index !== undefined) {
+    mainPart = wiql.slice(0, orderByMatch.index).trimEnd()
+    orderPart = wiql.slice(orderByMatch.index)
+  }
+
+  if (/\bWHERE\b/i.test(mainPart)) {
+    mainPart = `${mainPart} AND ${condition}`
+  } else {
+    mainPart = `${mainPart} WHERE ${condition}`
+  }
+
+  return `${mainPart}${orderPart}`
+}
+
+function prepareWiql(wiql: string, minExclusiveId: number | null, project: string): string {
   let q = wiql.trim().replace(/;+\s*$/, '')
   if (!q) return q
 
+  if (!/\[System\.TeamProject\]|\bSystem\.TeamProject\b/i.test(q)) {
+    q = appendWiqlCondition(q, `[System.TeamProject] = '${escapeWiqlStringLiteral(project)}'`)
+  }
+
   if (minExclusiveId != null) {
-    const orderByMatch = q.match(/\s+ORDER\s+BY\s+/i)
-    let mainPart = q
-    let orderPart = ''
-    if (orderByMatch?.index !== undefined) {
-      mainPart = q.slice(0, orderByMatch.index).trimEnd()
-      orderPart = q.slice(orderByMatch.index)
-    }
-    const cursor = `[System.Id] > ${minExclusiveId}`
-    if (/\bWHERE\b/i.test(mainPart)) {
-      mainPart = `${mainPart} AND ${cursor}`
-    } else {
-      mainPart = `${mainPart} WHERE ${cursor}`
-    }
-    q = `${mainPart}${orderPart}`
+    q = appendWiqlCondition(q, `[System.Id] > ${minExclusiveId}`)
   }
 
   if (!/\bORDER\s+BY\b/i.test(q)) {
@@ -119,6 +132,41 @@ export class AzureDevOpsProvider implements TicketProvider {
       return null
     } catch (err) {
       return `Azure DevOps authentication failed: ${err instanceof Error ? err.message : String(err)}`
+    }
+  }
+
+  async listProjectNames(settings: Record<string, string>): Promise<string[]> {
+    const { organization, pat } = this.extractCredentials(settings)
+    if (!organization || !pat) return []
+
+    try {
+      const names: string[] = []
+      let continuationToken: string | null = null
+
+      do {
+        const baseUrl = this.buildCollectionUrl(organization, '_apis/projects')
+        const url = `${baseUrl}&$top=100${continuationToken ? `&continuationToken=${encodeURIComponent(continuationToken)}` : ''}`
+        const res = await this.azureFetch(url, pat)
+
+        if (!res.ok) {
+          log.warn('listProjectNames: projects failed', { status: res.status })
+          return []
+        }
+
+        const data = (await res.json()) as { value?: Array<{ name?: string }> }
+        for (const project of data.value ?? []) {
+          const name = project.name?.trim()
+          if (name) names.push(name)
+        }
+
+        continuationToken = res.headers.get('x-ms-continuationtoken')
+      } while (continuationToken)
+
+      names.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
+      return names
+    } catch (err) {
+      log.warn('listProjectNames failed', { error: err instanceof Error ? err.message : String(err) })
+      return []
     }
   }
 
@@ -287,7 +335,7 @@ export class AzureDevOpsProvider implements TicketProvider {
 
     let wiql: string
     try {
-      wiql = prepareWiql(wiqlRaw, minExclusiveId)
+      wiql = prepareWiql(wiqlRaw, minExclusiveId, project)
     } catch (e) {
       throw new Error(
         `WIQL error: ${e instanceof Error ? e.message : String(e)}`

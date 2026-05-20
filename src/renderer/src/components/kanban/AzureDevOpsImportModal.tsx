@@ -10,7 +10,9 @@ import {
   Plus,
   Trash2,
   ListFilter,
-  ChevronDown
+  ChevronDown,
+  Settings,
+  FileText
 } from 'lucide-react'
 import { ProviderIcon } from '@/components/ui/provider-icon'
 import {
@@ -29,7 +31,15 @@ import {
   PopoverTrigger
 } from '@/components/ui/popover'
 import { useKanbanStore } from '@/stores/useKanbanStore'
-import { getProviderSettings } from '@/lib/provider-settings'
+import {
+  type AzureDevOpsSavedConfig,
+  getProjectProviderSettings,
+  getProviderSettings,
+  loadAzureDevOpsSavedConfigs,
+  loadProjectProviderSettingsFromDatabase,
+  saveProjectProviderSettingsToDatabase,
+  upsertAzureDevOpsSavedConfig
+} from '@/lib/provider-settings'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 
@@ -51,13 +61,19 @@ interface AzureDevOpsImportModalProps {
 
 const PER_PAGE = 30
 
-type QueryMode = 'builder' | 'wiql'
+type ImportTab = 'config' | 'builder' | 'wiql'
 
 interface BuilderClause {
   id: string
   fieldKey: string
   operator: string
   value: string
+}
+
+interface AzureDevOpsConfigDraft {
+  organization: string
+  project: string
+  pat: string
 }
 
 const FIELD_DEFS: Record<
@@ -162,6 +178,35 @@ function azureRepoSlug(settings: Record<string, string>): string | null {
   return org && proj ? `${org}/${proj}` : null
 }
 
+function hasAzureDevOpsConfig(settings: Record<string, string>): boolean {
+  return Boolean(
+    settings.azure_devops_organization?.trim() &&
+      settings.azure_devops_project?.trim() &&
+      settings.azure_devops_pat?.trim()
+  )
+}
+
+function draftFromSettings(settings: Record<string, string>): AzureDevOpsConfigDraft {
+  return {
+    organization: settings.azure_devops_organization ?? '',
+    project: settings.azure_devops_project ?? '',
+    pat: settings.azure_devops_pat ?? ''
+  }
+}
+
+function settingsFromDraft(draft: AzureDevOpsConfigDraft): Record<string, string> {
+  return {
+    azure_devops_organization: draft.organization.trim(),
+    azure_devops_project: draft.project.trim(),
+    azure_devops_pat: draft.pat.trim()
+  }
+}
+
+function savedConfigId(settings: Record<string, string>): string | null {
+  const slug = azureRepoSlug(settings)
+  return slug ? slug.toLowerCase() : null
+}
+
 const selectTriggerClass =
   'h-8 text-xs rounded-md border border-input bg-background px-2 text-foreground shrink-0'
 
@@ -204,11 +249,13 @@ function PicklistSelect({
 function AssigneeClauseValue({
   value,
   onChange,
-  disabled
+  disabled,
+  settings
 }: {
   value: string
   onChange: (v: string) => void
   disabled?: boolean
+  settings: Record<string, string>
 }) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
@@ -224,12 +271,12 @@ function AssigneeClauseValue({
     const timer = window.setTimeout(() => {
       setLoading(true)
       window.ticketImport
-        .azureDevOpsSearchUsers(getProviderSettings(), search)
+        .azureDevOpsSearchUsers(settings, search)
         .then(setUsers)
         .finally(() => setLoading(false))
     }, 280)
     return () => window.clearTimeout(timer)
-  }, [open, search])
+  }, [open, search, settings])
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -293,6 +340,97 @@ function AssigneeClauseValue({
   )
 }
 
+function AzureProjectSelect({
+  value,
+  onChange,
+  projects,
+  loading,
+  disabled
+}: {
+  value: string
+  onChange: (v: string) => void
+  projects: string[]
+  loading: boolean
+  disabled?: boolean
+}) {
+  const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState('')
+  const trimmed = value.trim()
+  const normalizedSearch = search.trim().toLowerCase()
+  const extras =
+    trimmed && !projects.some((project) => project.toLowerCase() === trimmed.toLowerCase())
+      ? [trimmed]
+      : []
+  const filtered = [...new Set([...projects, ...extras])]
+    .filter((project) => !normalizedSearch || project.toLowerCase().includes(normalizedSearch))
+    .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
+
+  useEffect(() => {
+    if (open) setSearch('')
+  }, [open])
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={disabled}
+          className="h-8 w-full justify-between text-xs font-normal px-2 font-sans"
+        >
+          <span className={cn('truncate text-left', !value && 'text-muted-foreground')}>
+            {value || (loading ? 'Carregando projects...' : 'Escolher project...')}
+          </span>
+          {loading ? (
+            <Loader2 className="h-3 w-3 shrink-0 animate-spin opacity-50" />
+          ) : (
+            <ChevronDown className="h-3 w-3 shrink-0 opacity-50" />
+          )}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[min(100vw-2rem,24rem)] p-2" align="start">
+        <Input
+          className="h-8 text-xs mb-2"
+          placeholder="Buscar project..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <div className="max-h-52 overflow-y-auto space-y-0.5">
+          {loading ? (
+            <div className="flex justify-center py-4">
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            </div>
+          ) : filtered.length === 0 ? (
+            <p className="text-[11px] text-muted-foreground px-1 py-2 leading-snug">
+              Nenhum project encontrado. Confira organization/PAT ou informe manualmente abaixo.
+            </p>
+          ) : (
+            filtered.map((project) => (
+              <button
+                key={project}
+                type="button"
+                className="w-full text-left rounded-md px-2 py-1.5 text-xs hover:bg-muted transition-colors"
+                onClick={() => {
+                  onChange(project)
+                  setOpen(false)
+                }}
+              >
+                <div className="font-medium truncate">{project}</div>
+              </button>
+            ))
+          )}
+        </div>
+        <Input
+          className="h-7 text-[11px] mt-2"
+          placeholder="Project exato (manual)"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      </PopoverContent>
+    </Popover>
+  )
+}
+
 export function AzureDevOpsImportModal({
   open,
   onOpenChange,
@@ -301,7 +439,16 @@ export function AzureDevOpsImportModal({
   const loadTickets = useKanbanStore((s) => s.loadTickets)
 
   const [repoSlug, setRepoSlug] = useState<string | null>(null)
-  const [queryMode, setQueryMode] = useState<QueryMode>('builder')
+  const [providerSettings, setProviderSettings] = useState<Record<string, string>>({})
+  const [configDraft, setConfigDraft] = useState<AzureDevOpsConfigDraft>({
+    organization: '',
+    project: '',
+    pat: ''
+  })
+  const [configLoading, setConfigLoading] = useState(false)
+  const [testingConfig, setTestingConfig] = useState(false)
+  const [savedConfigs, setSavedConfigs] = useState<AzureDevOpsSavedConfig[]>([])
+  const [activeTab, setActiveTab] = useState<ImportTab>('config')
   const [builderClauses, setBuilderClauses] = useState<BuilderClause[]>(defaultBuilderClauses)
   const [wiqlInput, setWiqlInput] = useState('')
   const [committedWiql, setCommittedWiql] = useState<string | null>(null)
@@ -309,6 +456,8 @@ export function AzureDevOpsImportModal({
   const [azureStates, setAzureStates] = useState<string[]>([])
   const [azureWitTypes, setAzureWitTypes] = useState<string[]>([])
   const [picklistsLoading, setPicklistsLoading] = useState(false)
+  const [azureProjects, setAzureProjects] = useState<string[]>([])
+  const [azureProjectsLoading, setAzureProjectsLoading] = useState(false)
 
   const [issues, setIssues] = useState<RemoteIssue[]>([])
   const [loading, setLoading] = useState(false)
@@ -328,9 +477,15 @@ export function AzureDevOpsImportModal({
 
   useEffect(() => {
     if (!open) return
-    const settings = getProviderSettings()
-    setRepoSlug(azureRepoSlug(settings))
-    setQueryMode('builder')
+    let cancelled = false
+    setConfigLoading(true)
+    setRepoSlug(null)
+    setProviderSettings({})
+    setConfigDraft({ organization: '', project: '', pat: '' })
+    setAzureStates([])
+    setAzureWitTypes([])
+    setAzureProjects([])
+    setActiveTab('config')
     setBuilderClauses(defaultBuilderClauses())
     const built = buildWiqlFromClauses(defaultBuilderClauses())
     setWiqlInput(built ?? '')
@@ -342,22 +497,87 @@ export function AzureDevOpsImportModal({
     pageTokensRef.current = [null]
     setWiqlError(null)
     setImportProgress(null)
-  }, [open])
+
+    void (async () => {
+      let saved = await loadAzureDevOpsSavedConfigs()
+      const globalSettings = getProviderSettings()
+      const globalId = savedConfigId(globalSettings)
+      if (
+        hasAzureDevOpsConfig(globalSettings) &&
+        globalId &&
+        !saved.some((config) => config.id === globalId)
+      ) {
+        saved = [
+          ...saved,
+          {
+            id: globalId,
+            label: azureRepoSlug(globalSettings) ?? 'Azure DevOps project',
+            settings: globalSettings,
+            updatedAt: ''
+          }
+        ].sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }))
+      }
+
+      const localProjectSettings = getProjectProviderSettings(projectId)
+      const dbProjectSettings = await loadProjectProviderSettingsFromDatabase(projectId)
+      const settings = {
+        ...localProjectSettings,
+        ...(dbProjectSettings ?? {})
+      }
+
+      if (cancelled) return
+      setSavedConfigs(saved)
+      setProviderSettings(settings)
+      setConfigDraft(draftFromSettings(settings))
+      const slug = hasAzureDevOpsConfig(settings) ? azureRepoSlug(settings) : null
+      setRepoSlug(slug)
+      setActiveTab(slug ? 'builder' : 'config')
+      setConfigLoading(false)
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [open, projectId])
 
   useEffect(() => {
     if (!open || !repoSlug) return
-    const s = getProviderSettings()
     setPicklistsLoading(true)
     void Promise.all([
-      window.ticketImport.azureDevOpsListStates(s),
-      window.ticketImport.azureDevOpsListWorkItemTypes(s)
+      window.ticketImport.azureDevOpsListStates(providerSettings),
+      window.ticketImport.azureDevOpsListWorkItemTypes(providerSettings)
     ])
       .then(([states, types]) => {
         setAzureStates(states)
         setAzureWitTypes(types)
       })
       .finally(() => setPicklistsLoading(false))
-  }, [open, repoSlug])
+  }, [open, repoSlug, providerSettings])
+
+  useEffect(() => {
+    if (!open || activeTab !== 'config') return
+    const organization = configDraft.organization.trim()
+    const pat = configDraft.pat.trim()
+    if (!organization || !pat) {
+      setAzureProjects([])
+      setAzureProjectsLoading(false)
+      return
+    }
+
+    const timer = window.setTimeout(() => {
+      setAzureProjectsLoading(true)
+      void window.ticketImport
+        .azureDevOpsListProjects({
+          azure_devops_organization: organization,
+          azure_devops_project: '',
+          azure_devops_pat: pat
+        })
+        .then(setAzureProjects)
+        .finally(() => setAzureProjectsLoading(false))
+    }, 350)
+
+    return () => window.clearTimeout(timer)
+  }, [open, activeTab, configDraft.organization, configDraft.pat])
 
   useEffect(() => {
     if (!open || !repoSlug || committedWiql === null) return
@@ -371,7 +591,7 @@ export function AzureDevOpsImportModal({
         'azure_devops',
         repoSlug,
         { page, perPage: PER_PAGE, state: 'all', search: committedWiql, nextPageToken: token },
-        getProviderSettings()
+        providerSettings
       )
       .then((result) => {
         setIssues(result.issues)
@@ -390,7 +610,53 @@ export function AzureDevOpsImportModal({
         setHasNextPage(false)
       })
       .finally(() => setLoading(false))
-  }, [open, repoSlug, committedWiql, page])
+  }, [open, repoSlug, committedWiql, page, providerSettings])
+
+  const updateConfigDraft = (patch: Partial<AzureDevOpsConfigDraft>): void => {
+    setConfigDraft((prev) => ({ ...prev, ...patch }))
+  }
+
+  const applySavedConfig = (id: string): void => {
+    const config = savedConfigs.find((item) => item.id === id)
+    if (!config) return
+    setConfigDraft(draftFromSettings(config.settings))
+  }
+
+  const handleSaveConfig = async (): Promise<void> => {
+    const azureSettings = settingsFromDraft(configDraft)
+    if (!hasAzureDevOpsConfig(azureSettings)) {
+      toast.error('Preencha organização, project e PAT do Azure DevOps.')
+      return
+    }
+
+    setTestingConfig(true)
+    try {
+      const result = await window.ticketImport.authenticate('azure_devops', azureSettings)
+      if (!result.success) {
+        toast.error(result.error ?? 'Falha ao conectar no Azure DevOps.')
+        return
+      }
+
+      const nextSettings = { ...providerSettings, ...azureSettings }
+      await saveProjectProviderSettingsToDatabase(projectId, nextSettings)
+      const nextSavedConfigs = await upsertAzureDevOpsSavedConfig(azureSettings)
+      setProviderSettings(nextSettings)
+      setSavedConfigs(nextSavedConfigs)
+      setRepoSlug(azureRepoSlug(nextSettings))
+      setActiveTab('builder')
+      setCommittedWiql(null)
+      setIssues([])
+      setSelected(new Set())
+      allFetchedIssuesRef.current = new Map()
+      setPage(1)
+      pageTokensRef.current = [null]
+      toast.success('Azure DevOps configurado para este projeto.')
+    } catch (err) {
+      toast.error(`Falha ao salvar config: ${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setTestingConfig(false)
+    }
+  }
 
   const runSearchWithWiql = (wiql: string): void => {
     const trimmed = wiql.trim()
@@ -403,7 +669,7 @@ export function AzureDevOpsImportModal({
   }
 
   const handleSearch = (): void => {
-    if (queryMode === 'builder') {
+    if (activeTab === 'builder') {
       const built = buildWiqlFromClauses(builderClauses)
       if (!built) {
         toast.error('Adicione pelo menos um filtro válido (campo, operador e valor).')
@@ -532,6 +798,96 @@ export function AzureDevOpsImportModal({
   }
 
   const previewWiql = buildWiqlFromClauses(builderClauses)
+  const resultsPanel = (
+    <div className="flex-1 overflow-y-auto border-t">
+      {loading ? (
+        <div className="flex items-center justify-center gap-2 p-8 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Loading work items...
+        </div>
+      ) : committedWiql === null ? (
+        <div className="flex items-center justify-center p-8 text-sm text-muted-foreground text-center px-6">
+          Monte os filtros no editor (como no Azure DevOps) ou edite o WIQL, depois clique em
+          Executar consulta.
+        </div>
+      ) : issues.length === 0 && !wiqlError ? (
+        <div className="flex items-center justify-center p-8 text-sm text-muted-foreground">
+          No work items found.
+        </div>
+      ) : issues.length > 0 ? (
+        <div className="divide-y">
+          <div className="flex items-center gap-3 px-4 py-2 bg-muted/30 sticky top-0 z-10">
+            <Checkbox
+              checked={issues.length > 0 && issues.every((i) => selected.has(i.externalId))}
+              onCheckedChange={toggleSelectAll}
+            />
+            <span className="text-xs text-muted-foreground">
+              {selected.size > 0 ? `${selected.size} selected` : 'Select all'}
+            </span>
+          </div>
+
+          {issues.map((issue) => (
+            <div
+              key={issue.externalId}
+              className="flex items-start gap-3 px-4 py-2.5 hover:bg-muted/20 cursor-pointer transition-colors"
+              onClick={() => toggleSelect(issue.externalId)}
+            >
+              <Checkbox
+                checked={selected.has(issue.externalId)}
+                onCheckedChange={() => toggleSelect(issue.externalId)}
+                className="mt-0.5"
+              />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground font-mono">#{issue.externalId}</span>
+                  <span
+                    className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${stateBadgeClass(issue.state)}`}
+                  >
+                    {stateLabel(issue.state)}
+                  </span>
+                </div>
+                <p className="text-sm font-medium truncate mt-0.5">{issue.title}</p>
+              </div>
+              <a
+                href={issue.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="text-muted-foreground hover:text-foreground shrink-0 mt-0.5"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+              </a>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  )
+
+  const paginationPanel =
+    page > 1 || hasNextPage ? (
+      <div className="flex items-center justify-between px-4 py-2 border-t shrink-0">
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={page <= 1 || loading}
+          onClick={() => setPage((p) => p - 1)}
+        >
+          <ChevronLeft className="h-3.5 w-3.5 mr-1" />
+          Previous
+        </Button>
+        <span className="text-xs text-muted-foreground">Page {page}</span>
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={!hasNextPage || loading}
+          onClick={() => setPage((p) => p + 1)}
+        >
+          Next
+          <ChevronRight className="h-3.5 w-3.5 ml-1" />
+        </Button>
+      </div>
+    ) : null
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -547,59 +903,157 @@ export function AzureDevOpsImportModal({
         </DialogHeader>
 
         <div className="flex-1 min-h-0 flex flex-col">
-          {!repoSlug && (
-            <div className="flex flex-col items-center justify-center gap-3 p-8 text-sm text-center text-muted-foreground">
-              <AlertCircle className="h-6 w-6 text-amber-500 shrink-0" />
-              <p>
-                Azure DevOps is not configured.{' '}
-                <span className="text-foreground">
-                  Go to <strong>Settings &gt; Integrations</strong> to add organization, project, and
-                  personal access token.
-                </span>
-              </p>
+          <div className="px-4 py-2 border-b shrink-0">
+            <div className="inline-flex rounded-md border border-border p-0.5 bg-muted/40">
+              {[
+                { id: 'config' as const, label: 'Config', icon: Settings },
+                { id: 'builder' as const, label: 'Editor', icon: ListFilter },
+                { id: 'wiql' as const, label: 'WIQL', icon: FileText }
+              ].map((tab) => {
+                const Icon = tab.icon
+                const disabled = tab.id !== 'config' && !repoSlug
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => {
+                      if (tab.id === 'wiql') {
+                        syncWiqlFromBuilder()
+                        setTimeout(() => textareaRef.current?.focus(), 0)
+                      }
+                      setActiveTab(tab.id)
+                    }}
+                    className={cn(
+                      'rounded px-2.5 py-1 text-xs font-medium transition-colors inline-flex items-center gap-1.5',
+                      activeTab === tab.id
+                        ? 'bg-background text-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground',
+                      disabled && 'opacity-40 cursor-not-allowed hover:text-muted-foreground'
+                    )}
+                  >
+                    <Icon className="h-3 w-3" />
+                    {tab.label}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          {activeTab === 'config' && (
+          <div className="px-4 py-3 border-b shrink-0">
+            {configLoading ? (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Carregando config do projeto...
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="flex items-start gap-2 text-xs text-muted-foreground">
+                  <AlertCircle className="h-3.5 w-3.5 mt-0.5 text-amber-500 shrink-0" />
+                  <p>
+                    Configure o Azure DevOps para este projeto do Octo-b. Essa config fica separada
+                    por projeto.
+                  </p>
+                </div>
+                {savedConfigs.length > 0 && (
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                      Config salva
+                    </label>
+                    <select
+                      className={cn(selectTriggerClass, 'w-full')}
+                      value=""
+                      onChange={(e) => applySavedConfig(e.target.value)}
+                      disabled={testingConfig}
+                    >
+                      <option value="">Escolher config já salva...</option>
+                      {savedConfigs.map((config) => (
+                        <option key={config.id} value={config.id}>
+                          {config.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                      Organization
+                    </label>
+                    <Input
+                      className="h-8 text-xs"
+                      placeholder="myorg ou https://dev.azure.com/myorg"
+                      value={configDraft.organization}
+                      onChange={(e) => updateConfigDraft({ organization: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                      Azure Project
+                    </label>
+                    <AzureProjectSelect
+                      value={configDraft.project}
+                      onChange={(project) => updateConfigDraft({ project })}
+                      projects={azureProjects}
+                      loading={azureProjectsLoading}
+                      disabled={!configDraft.organization.trim() || !configDraft.pat.trim()}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                      PAT
+                    </label>
+                    <Input
+                      className="h-8 text-xs"
+                      type="password"
+                      placeholder="Work Items Read/Write; Graph Read opcional"
+                      value={configDraft.pat}
+                      onChange={(e) => updateConfigDraft({ pat: e.target.value })}
+                    />
+                  </div>
+                </div>
+                <div className="flex justify-end gap-2">
+                  {repoSlug && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs"
+                      onClick={() => {
+                        setConfigDraft(draftFromSettings(providerSettings))
+                      }}
+                      disabled={testingConfig}
+                    >
+                      Reverter
+                    </Button>
+                  )}
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={() => void handleSaveConfig()}
+                    disabled={testingConfig}
+                  >
+                    {testingConfig && <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />}
+                    Testar e salvar
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+          )}
+
+          {!repoSlug && !configLoading && activeTab !== 'config' && (
+            <div className="flex-1 flex items-center justify-center p-8 text-sm text-center text-muted-foreground">
+              Salve a config do Azure DevOps deste projeto para montar e executar consultas.
             </div>
           )}
 
-          {repoSlug && (
+          {repoSlug && activeTab !== 'config' && (
             <>
               <div className="px-4 pt-3 pb-2 border-b shrink-0 flex flex-col gap-3">
                 <div className="flex flex-wrap items-center gap-2">
-                  <div className="inline-flex rounded-md border border-border p-0.5 bg-muted/40">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setQueryMode('builder')
-                        syncWiqlFromBuilder()
-                      }}
-                      className={cn(
-                        'rounded px-2.5 py-1 text-xs font-medium transition-colors',
-                        queryMode === 'builder'
-                          ? 'bg-background text-foreground shadow-sm'
-                          : 'text-muted-foreground hover:text-foreground'
-                      )}
-                    >
-                      <span className="inline-flex items-center gap-1.5">
-                        <ListFilter className="h-3 w-3" />
-                        Editor
-                      </span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        syncWiqlFromBuilder()
-                        setQueryMode('wiql')
-                        setTimeout(() => textareaRef.current?.focus(), 0)
-                      }}
-                      className={cn(
-                        'rounded px-2.5 py-1 text-xs font-medium transition-colors',
-                        queryMode === 'wiql'
-                          ? 'bg-background text-foreground shadow-sm'
-                          : 'text-muted-foreground hover:text-foreground'
-                      )}
-                    >
-                      WIQL
-                    </button>
-                  </div>
                   <span className="text-[11px] text-muted-foreground">
                     Tipo de consulta: lista plana de work items (filtros combinados com{' '}
                     <span className="font-mono text-[10px]">AND</span>). Estados e tipos vêm do
@@ -608,7 +1062,7 @@ export function AzureDevOpsImportModal({
                   </span>
                 </div>
 
-                {queryMode === 'builder' ? (
+                {activeTab === 'builder' ? (
                   <div className="flex flex-col gap-2">
                     <div className="hidden sm:grid sm:grid-cols-[minmax(7rem,9rem)_minmax(7rem,9rem)_1fr_auto] gap-2 px-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                       <span>Campo</span>
@@ -653,6 +1107,7 @@ export function AzureDevOpsImportModal({
                             <AssigneeClauseValue
                               value={clause.value}
                               onChange={(v) => updateClause(clause.id, { value: v })}
+                              settings={providerSettings}
                             />
                           )
                         } else {
@@ -790,97 +1245,8 @@ export function AzureDevOpsImportModal({
                 )}
               </div>
 
-              <div className="flex-1 overflow-y-auto">
-                {loading ? (
-                  <div className="flex items-center justify-center gap-2 p-8 text-sm text-muted-foreground">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Loading work items...
-                  </div>
-                ) : committedWiql === null ? (
-                  <div className="flex items-center justify-center p-8 text-sm text-muted-foreground text-center px-6">
-                    Monte os filtros no editor (como no Azure DevOps) ou edite o WIQL, depois clique em
-                    Executar consulta.
-                  </div>
-                ) : issues.length === 0 && !wiqlError ? (
-                  <div className="flex items-center justify-center p-8 text-sm text-muted-foreground">
-                    No work items found.
-                  </div>
-                ) : issues.length > 0 ? (
-                  <div className="divide-y">
-                    <div className="flex items-center gap-3 px-4 py-2 bg-muted/30 sticky top-0 z-10">
-                      <Checkbox
-                        checked={
-                          issues.length > 0 && issues.every((i) => selected.has(i.externalId))
-                        }
-                        onCheckedChange={toggleSelectAll}
-                      />
-                      <span className="text-xs text-muted-foreground">
-                        {selected.size > 0 ? `${selected.size} selected` : 'Select all'}
-                      </span>
-                    </div>
-
-                    {issues.map((issue) => (
-                      <div
-                        key={issue.externalId}
-                        className="flex items-start gap-3 px-4 py-2.5 hover:bg-muted/20 cursor-pointer transition-colors"
-                        onClick={() => toggleSelect(issue.externalId)}
-                      >
-                        <Checkbox
-                          checked={selected.has(issue.externalId)}
-                          onCheckedChange={() => toggleSelect(issue.externalId)}
-                          className="mt-0.5"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs text-muted-foreground font-mono">
-                              #{issue.externalId}
-                            </span>
-                            <span
-                              className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${stateBadgeClass(issue.state)}`}
-                            >
-                              {stateLabel(issue.state)}
-                            </span>
-                          </div>
-                          <p className="text-sm font-medium truncate mt-0.5">{issue.title}</p>
-                        </div>
-                        <a
-                          href={issue.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={(e) => e.stopPropagation()}
-                          className="text-muted-foreground hover:text-foreground shrink-0 mt-0.5"
-                        >
-                          <ExternalLink className="h-3.5 w-3.5" />
-                        </a>
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-
-              {(page > 1 || hasNextPage) && (
-                <div className="flex items-center justify-between px-4 py-2 border-t shrink-0">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    disabled={page <= 1 || loading}
-                    onClick={() => setPage((p) => p - 1)}
-                  >
-                    <ChevronLeft className="h-3.5 w-3.5 mr-1" />
-                    Previous
-                  </Button>
-                  <span className="text-xs text-muted-foreground">Page {page}</span>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    disabled={!hasNextPage || loading}
-                    onClick={() => setPage((p) => p + 1)}
-                  >
-                    Next
-                    <ChevronRight className="h-3.5 w-3.5 ml-1" />
-                  </Button>
-                </div>
-              )}
+              {resultsPanel}
+              {paginationPanel}
             </>
           )}
         </div>

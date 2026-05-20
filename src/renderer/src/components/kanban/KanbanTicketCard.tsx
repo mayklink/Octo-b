@@ -1102,6 +1102,7 @@ export const KanbanTicketCard = memo(function KanbanTicketCard({
           open={showStatusUpdate}
           onOpenChange={setShowStatusUpdate}
           externalProvider={ticket.external_provider!}
+          projectId={ticket.project_id}
           externalId={ticket.external_id}
           externalUrl={ticket.external_url}
           ticketTitle={ticket.title}
