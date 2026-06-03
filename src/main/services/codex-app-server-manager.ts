@@ -21,6 +21,7 @@ import type { TurnSteerResponse } from '@shared/codex-schemas/v2/TurnSteerRespon
 import type { TurnInterruptParams } from '@shared/codex-schemas/v2/TurnInterruptParams'
 import type { ThreadReadParams } from '@shared/codex-schemas/v2/ThreadReadParams'
 import type { ThreadRollbackParams } from '@shared/codex-schemas/v2/ThreadRollbackParams'
+import type { UserInput } from '@shared/codex-schemas/v2/UserInput'
 import type { SandboxMode } from '@shared/codex-schemas/v2/SandboxMode'
 import type { AskForApproval } from '@shared/codex-schemas/v2/AskForApproval'
 import type { TurnStartedNotification } from '@shared/codex-schemas/v2/TurnStartedNotification'
@@ -132,7 +133,7 @@ export interface CodexStartSessionOptions {
 
 export interface CodexTurnInput {
   text?: string
-  input?: Array<{ type: string; text: string }>
+  input?: UserInput[]
   model?: string
   reasoningEffort?: string
   serviceTier?: string | null

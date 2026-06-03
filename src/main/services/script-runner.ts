@@ -105,10 +105,10 @@ export class ScriptRunner {
     }
 
     if (process.platform === 'win32') {
-      const args = ['/pid', String(pid), '/t']
-      if (signal === 'SIGKILL') {
-        args.push('/f')
-      }
+      // On Windows, a non-forced taskkill can terminate the shell quickly while
+      // leaving spawned dev servers (notably dotnet/node) alive. Stop actions in
+      // Octob are explicit, so force the whole tree every time.
+      const args = ['/pid', String(pid), '/t', '/f']
       const taskkill = spawn('taskkill', args, { stdio: 'ignore' })
       taskkill.on('error', () => {
         try {

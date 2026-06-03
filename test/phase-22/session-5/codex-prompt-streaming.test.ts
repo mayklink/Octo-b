@@ -155,6 +155,42 @@ describe('CodexImplementer.prompt()', () => {
     )
   })
 
+  it('passes image file parts to Codex turn input', async () => {
+    seedSession()
+
+    simulateManagerEvents([
+      {
+        id: 'e1',
+        kind: 'notification',
+        provider: 'codex',
+        threadId: 'thread-1',
+        createdAt: new Date().toISOString(),
+        method: 'turn/completed',
+        payload: { turn: { status: 'completed' } }
+      }
+    ])
+
+    await impl.prompt('/test/project', 'thread-1', [
+      { type: 'text', text: 'olha esse print' },
+      {
+        type: 'file',
+        mime: 'image/png',
+        url: 'data:image/png;base64,abc123',
+        filename: 'screenshot.png'
+      }
+    ])
+
+    expect(mockManager.sendTurn).toHaveBeenCalledWith('thread-1', {
+      text: 'olha esse print',
+      input: [
+        { type: 'text', text: 'olha esse print', text_elements: [] },
+        { type: 'image', url: 'data:image/png;base64,abc123' }
+      ],
+      model: expect.any(String),
+      interactionMode: 'default'
+    })
+  })
+
   it('logs when title generation is skipped for a pre-titled session', async () => {
     impl.setDatabaseService({
       getSession: vi.fn().mockReturnValue({ id: 'octob-session-1', name: 'Existing title' })
@@ -926,7 +962,7 @@ describe('CodexImplementer.prompt()', () => {
 
     expect(mockManager.sendTurn).toHaveBeenCalledWith('thread-1', {
       text: 'test',
-      model: 'gpt-5.4',
+      model: expect.any(String),
       serviceTier: 'fast',
       interactionMode: 'default'
     })

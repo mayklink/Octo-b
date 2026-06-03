@@ -172,10 +172,9 @@ export class BashService {
     }
 
     if (process.platform === 'win32') {
-      const args = ['/pid', String(pid), '/t']
-      if (signal === 'SIGKILL') {
-        args.push('/f')
-      }
+      // A graceful taskkill may close only the shell and leave child dev servers
+      // such as dotnet/node alive. User-initiated aborts should stop the tree.
+      const args = ['/pid', String(pid), '/t', '/f']
       const taskkill = spawn('taskkill', args, { stdio: 'ignore' })
       taskkill.on('error', () => {
         try {

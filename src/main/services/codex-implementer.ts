@@ -127,9 +127,50 @@ interface CodexSteerResult {
   turnId?: string
 }
 
+type PromptMessagePart =
+  | { type: 'text'; text: string }
+  | { type: 'file'; mime: string; url: string; filename?: string }
+
 function previewText(value: string, maxLength: number = 120): string {
   if (value.length <= maxLength) return value
   return value.slice(0, maxLength) + '...'
+}
+
+function buildCodexUserInput(message: string | PromptMessagePart[]): {
+  text: string
+  input?: UserInput[]
+} {
+  if (typeof message === 'string') {
+    return { text: message }
+  }
+
+  const input: UserInput[] = []
+  const textParts: string[] = []
+  let hasImage = false
+
+  for (const part of message) {
+    if (part.type === 'text') {
+      textParts.push(part.text)
+      input.push({ type: 'text', text: part.text, text_elements: [] })
+      continue
+    }
+
+    if (!part.mime.startsWith('image/')) {
+      continue
+    }
+
+    if (part.url.startsWith('data:') || /^https?:\/\//i.test(part.url)) {
+      input.push({ type: 'image', url: part.url })
+    } else {
+      input.push({ type: 'localImage', path: part.url })
+    }
+    hasImage = true
+  }
+
+  return {
+    text: textParts.join('\n'),
+    input: hasImage ? input : undefined
+  }
 }
 
 /**
@@ -651,12 +692,7 @@ export class CodexImplementer implements AgentSdkImplementer {
   async prompt(
     worktreePath: string,
     agentSessionId: string,
-    message:
-      | string
-      | Array<
-          | { type: 'text'; text: string }
-          | { type: 'file'; mime: string; url: string; filename?: string }
-        >,
+    message: string | PromptMessagePart[],
     modelOverride?: { providerID: string; modelID: string; variant?: string },
     options?: PromptOptions
   ): Promise<void> {
@@ -666,19 +702,10 @@ export class CodexImplementer implements AgentSdkImplementer {
       throw new Error(`Prompt failed: session not found for ${worktreePath} / ${agentSessionId}`)
     }
 
-    // Extract text from message
-    let text: string
-    if (typeof message === 'string') {
-      text = message
-    } else {
-      text = message
-        .filter((part) => part.type === 'text')
-        .map((part) => (part as { type: 'text'; text: string }).text)
-        .join('\n')
-    }
+    const { text, input } = buildCodexUserInput(message)
 
-    if (!text.trim()) {
-      log.warn('Prompt: empty text, ignoring', { worktreePath, agentSessionId })
+    if (!text.trim() && !input?.some((part) => part.type === 'image' || part.type === 'localImage')) {
+      log.warn('Prompt: empty text and no image input, ignoring', { worktreePath, agentSessionId })
       return
     }
 
@@ -851,6 +878,7 @@ export class CodexImplementer implements AgentSdkImplementer {
       const reasoningEffort = modelOverride?.variant ?? this.selectedVariant
       await this.manager.sendTurn(session.threadId, {
         text,
+        ...(input ? { input } : {}),
         model,
         ...(options?.codexFastMode ? { serviceTier: 'fast' } : {}),
         ...(reasoningEffort ? { reasoningEffort } : {}),

@@ -86,18 +86,52 @@ describe('ScriptRunner process lifecycle', () => {
     const runner = new ScriptRunner()
     const proc = new MockChildProcess(2001)
     const processKillSpy = vi.spyOn(process, 'kill').mockReturnValue(true)
+    const platformDescriptor = Object.getOwnPropertyDescriptor(process, 'platform')
 
+    Object.defineProperty(process, 'platform', { value: 'linux' })
     spawnMock.mockReturnValue(proc)
 
-    await runner.runPersistent(['echo run'], '/tmp', 'script:run:worktree-2')
+    try {
+      await runner.runPersistent(['echo run'], '/tmp', 'script:run:worktree-2')
 
-    const killPromise = runner.killProcess('script:run:worktree-2')
-    expect(processKillSpy).toHaveBeenCalledWith(-2001, 'SIGTERM')
+      const killPromise = runner.killProcess('script:run:worktree-2')
+      expect(processKillSpy).toHaveBeenCalledWith(-2001, 'SIGTERM')
 
-    proc.emit('close', 0)
-    await killPromise
+      proc.emit('close', 0)
+      await killPromise
+    } finally {
+      if (platformDescriptor) {
+        Object.defineProperty(process, 'platform', platformDescriptor)
+      }
+      processKillSpy.mockRestore()
+    }
+  })
 
-    processKillSpy.mockRestore()
+  test('killProcess force-kills the full Windows process tree', async () => {
+    const runner = new ScriptRunner()
+    const proc = new MockChildProcess(2101)
+    const taskkill = new MockChildProcess(2102)
+    const platformDescriptor = Object.getOwnPropertyDescriptor(process, 'platform')
+
+    Object.defineProperty(process, 'platform', { value: 'win32' })
+    spawnMock.mockReturnValueOnce(proc).mockReturnValueOnce(taskkill)
+
+    try {
+      await runner.runPersistent(['dotnet run'], '/tmp', 'script:run:worktree-win')
+
+      const killPromise = runner.killProcess('script:run:worktree-win')
+
+      expect(spawnMock).toHaveBeenLastCalledWith('taskkill', ['/pid', '2101', '/t', '/f'], {
+        stdio: 'ignore'
+      })
+
+      proc.emit('close', 1)
+      await killPromise
+    } finally {
+      if (platformDescriptor) {
+        Object.defineProperty(process, 'platform', platformDescriptor)
+      }
+    }
   })
 
   test('runPersistent batches output chunks into fewer IPC events', async () => {
@@ -119,6 +153,7 @@ describe('ScriptRunner process lifecycle', () => {
     runner.setMainWindow(mockWindow)
 
     await runner.runPersistent(['echo run'], '/tmp', 'script:run:batched')
+    sendSpy.mockClear()
 
     proc.stdout.emit('data', Buffer.from('A'))
     proc.stdout.emit('data', Buffer.from('B'))
