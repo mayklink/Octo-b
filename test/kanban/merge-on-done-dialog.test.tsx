@@ -146,6 +146,21 @@ describe('MergeOnDoneDialog', () => {
         getDiffStat: vi.fn(),
         getRemoteUrl: vi.fn().mockResolvedValue({ success: true, url: null, remote: null }),
         pull: vi.fn().mockResolvedValue({ success: true }),
+        getFileStatuses: vi.fn().mockResolvedValue({
+          success: true,
+          files: [
+            {
+              path: '/repo/main/src/file.ts',
+              relativePath: 'src/file.ts',
+              status: 'C',
+              staged: false
+            }
+          ]
+        }),
+        getBranchInfo: vi.fn().mockResolvedValue({
+          success: true,
+          branch: { name: 'main', tracking: null, ahead: 0, behind: 0 }
+        }),
         listBranchesWithStatus: vi.fn().mockResolvedValue({
           success: true,
           branches: [
@@ -170,7 +185,7 @@ describe('MergeOnDoneDialog', () => {
     })
   })
 
-  test('keeps ticket in review when merge returns conflicts', async () => {
+  test('keeps ticket in review and offers agent fix when merge returns conflicts', async () => {
     merge.mockResolvedValue({
       success: false,
       error: 'Merge conflicts in 1 file(s). Resolve conflicts before continuing.',
@@ -183,13 +198,21 @@ describe('MergeOnDoneDialog', () => {
     fireEvent.click(await screen.findByRole('button', { name: /^merge$/i }))
 
     await waitFor(() => {
-      expect(mergeAbort).toHaveBeenCalledWith('/repo/main')
+      expect(toastError).toHaveBeenCalledWith(
+        'Merge conflicts in 1 file',
+        expect.objectContaining({
+          action: expect.objectContaining({
+            label: 'Fix with agent',
+            onClick: expect.any(Function)
+          })
+        })
+      )
     })
 
+    expect(mergeAbort).not.toHaveBeenCalled()
     expect(ticketMove).not.toHaveBeenCalled()
     expect(useKanbanStore.getState().tickets.get('project-1')?.[0]?.column).toBe('review')
     expect(useKanbanStore.getState().pendingDoneMove).toBeNull()
-    expect(toastError).toHaveBeenCalledWith('Merge conflicts in 1 file — merge manually')
   })
 
   test('keeps ticket in review when merge fails without conflicts', async () => {

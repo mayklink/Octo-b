@@ -1,17 +1,29 @@
 import { useState, useEffect, useCallback, useMemo, type ReactNode } from 'react'
 import { useKanbanStore } from '@/stores/useKanbanStore'
 import { useWorktreeStore } from '@/stores/useWorktreeStore'
+import { useSessionStore } from '@/stores/useSessionStore'
+import { useSettingsStore } from '@/stores/useSettingsStore'
+import { useGitStore } from '@/stores/useGitStore'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { toast } from 'sonner'
-import { Loader2, GitMerge, GitCommit, Archive, GitBranch, ChevronDown, Check, Search } from 'lucide-react'
+import {
+  Loader2,
+  GitMerge,
+  GitCommit,
+  Archive,
+  GitBranch,
+  ChevronDown,
+  Check,
+  Search
+} from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 /** Strip origin/ for picker + merge; skip unusable ref names */
 function branchNameForMergeTarget(raw: string, featureBranch: string): string | null {
-  let n = raw.replace(/^origin\//, '')
+  const n = raw.replace(/^origin\//, '')
   if (n === featureBranch) return null
   if (n === 'HEAD' || n.includes('->')) return null
   return n
@@ -30,6 +42,7 @@ interface ResolvedState {
   featureWorktreeId: string
   featureWorktreePath: string
   featureBranch: string
+  baseWorktreeId: string
   baseWorktreePath: string
   baseBranch: string
   /** Kanban project id — refresh active worktrees when changing merge target */
@@ -119,8 +132,10 @@ export function MergeOnDoneDialog() {
         )
         const defaultWorktreeMergeFallbackPath = defaultWt?.path ?? null
 
+        let baseWorktreeId: string
         let baseWorktreePath: string
         if (baseDedicated) {
+          baseWorktreeId = baseDedicated.id
           baseWorktreePath = baseDedicated.path
         } else {
           if (!defaultWt) {
@@ -138,6 +153,7 @@ export function MergeOnDoneDialog() {
             clearPendingDoneMove()
             return
           }
+          baseWorktreeId = defaultWt.id
           baseWorktreePath = defaultWt.path
         }
 
@@ -154,9 +170,7 @@ export function MergeOnDoneDialog() {
 
         // Get uncommitted diff stats for both worktrees if needed
         const [featureDiffResult, baseDiffResult] = await Promise.all([
-          hasUncommitted
-            ? window.gitOps.getDiffStat(featureWorktree.path)
-            : Promise.resolve(null),
+          hasUncommitted ? window.gitOps.getDiffStat(featureWorktree.path) : Promise.resolve(null),
           baseDirty && baseDedicated
             ? window.gitOps.getDiffStat(baseDedicated.path)
             : Promise.resolve(null)
@@ -206,9 +220,7 @@ export function MergeOnDoneDialog() {
         if (cancelled) return
 
         const mergeableViaDedicatedWorktreeList = activeWorktrees
-          .filter(
-            (w) => w.status === 'active' && w.branch_name !== featureWorktree.branch_name
-          )
+          .filter((w) => w.status === 'active' && w.branch_name !== featureWorktree.branch_name)
           .map((w) => w.branch_name)
 
         const branchNamesUniq = new Set<string>(mergeableViaDedicatedWorktreeList)
@@ -226,14 +238,13 @@ export function MergeOnDoneDialog() {
           // Non-critical — worktree-only list still works
         }
 
-        const candidateBaseBranches = Array.from(branchNamesUniq).sort((a, b) =>
-          a.localeCompare(b)
-        )
+        const candidateBaseBranches = Array.from(branchNamesUniq).sort((a, b) => a.localeCompare(b))
 
         setResolved({
           featureWorktreeId: featureWorktree.id,
           featureWorktreePath: featureWorktree.path,
           featureBranch: featureWorktree.branch_name,
+          baseWorktreeId,
           baseWorktreePath,
           baseBranch: resolvedBaseBranch,
           projectId: featureWorktree.project_id,
@@ -389,6 +400,35 @@ export function MergeOnDoneDialog() {
     }
   }, [resolved, baseCommitMessage, completeDoneMove, clearPendingDoneMove])
 
+  const handleFixMergeConflicts = useCallback(async (target: ResolvedState) => {
+    const sessionStore = useSessionStore.getState()
+    const worktreeStore = useWorktreeStore.getState()
+    const settingsStore = useSettingsStore.getState()
+    const mode =
+      settingsStore.mergeConflictMode === 'always-ask' ? 'build' : settingsStore.mergeConflictMode
+
+    worktreeStore.selectWorktree(target.baseWorktreeId, { preservePinnedBoard: true })
+
+    const result = await sessionStore.createSession(
+      target.baseWorktreeId,
+      target.projectId,
+      undefined,
+      mode
+    )
+
+    if (!result.success || !result.session) {
+      toast.error(result.error ? `Failed to start agent: ${result.error}` : 'Failed to start agent')
+      return
+    }
+
+    await sessionStore.updateSessionName(
+      result.session.id,
+      `Merge Conflicts — ${target.baseBranch}`
+    )
+    sessionStore.setPendingMessage(result.session.id, 'Fix merge conflicts')
+    sessionStore.setActiveSession(result.session.id)
+  }, [])
+
   const handleMerge = useCallback(async () => {
     if (!resolved) return
     setMerging(true)
@@ -419,11 +459,21 @@ export function MergeOnDoneDialog() {
       )
 
       if (!mergeResult.success) {
-        // Conflicts or error — abort and let user handle manually
+        // Leave conflicts in the base worktree so the agent has real conflict markers to resolve.
         if (mergeResult.conflicts && mergeResult.conflicts.length > 0) {
-          await window.gitOps.mergeAbort(resolved.baseWorktreePath)
+          useGitStore.getState().setHasConflicts(resolved.baseWorktreePath, true)
+          void useGitStore.getState().refreshStatuses(resolved.baseWorktreePath)
           toast.error(
-            `Merge conflicts in ${mergeResult.conflicts.length} file${mergeResult.conflicts.length !== 1 ? 's' : ''} — merge manually`
+            `Merge conflicts in ${mergeResult.conflicts.length} file${mergeResult.conflicts.length !== 1 ? 's' : ''}`,
+            {
+              duration: 10000,
+              action: {
+                label: 'Fix with agent',
+                onClick: () => {
+                  void handleFixMergeConflicts(resolved)
+                }
+              }
+            }
           )
         } else {
           toast.error(`Merge failed: ${mergeResult.error}`)
@@ -440,7 +490,7 @@ export function MergeOnDoneDialog() {
     } finally {
       setMerging(false)
     }
-  }, [resolved, clearPendingDoneMove])
+  }, [resolved, clearPendingDoneMove, handleFixMergeConflicts])
 
   const selectMergeBaseBranch = useCallback(
     async (branchName: string) => {
@@ -456,6 +506,7 @@ export function MergeOnDoneDialog() {
         (w) => w.branch_name === branchName && w.status === 'active'
       )
 
+      let nextBaseWorktreeId: string
       let nextBasePath: string
       if (baseWt) {
         const dirty = await window.gitOps.hasUncommittedChanges(baseWt.path)
@@ -465,6 +516,7 @@ export function MergeOnDoneDialog() {
           )
           return
         }
+        nextBaseWorktreeId = baseWt.id
         nextBasePath = baseWt.path
       } else {
         const fallback = resolved.defaultWorktreeMergeFallbackPath
@@ -481,6 +533,14 @@ export function MergeOnDoneDialog() {
           )
           return
         }
+        const fallbackWt = activeWorktrees.find((w) => w.path === fallback)
+        if (!fallbackWt) {
+          toast.warning(
+            'Cannot resolve the default workspace for this merge target — refresh worktrees and try again.'
+          )
+          return
+        }
+        nextBaseWorktreeId = fallbackWt.id
         nextBasePath = fallback
       }
 
@@ -498,6 +558,7 @@ export function MergeOnDoneDialog() {
           ? {
               ...prev,
               baseBranch: branchName,
+              baseWorktreeId: nextBaseWorktreeId,
               baseWorktreePath: nextBasePath,
               baseDirty: false,
               baseUncommittedStats: { filesChanged: 0, insertions: 0, deletions: 0 },
@@ -520,12 +581,14 @@ export function MergeOnDoneDialog() {
     if (!resolved) return
     setArchiving(true)
     try {
-      const result = await useWorktreeStore.getState().archiveWorktree(
-        resolved.featureWorktreeId,
-        resolved.featureWorktreePath,
-        resolved.featureBranch,
-        resolved.projectPath
-      )
+      const result = await useWorktreeStore
+        .getState()
+        .archiveWorktree(
+          resolved.featureWorktreeId,
+          resolved.featureWorktreePath,
+          resolved.featureBranch,
+          resolved.projectPath
+        )
 
       if (result.success) {
         toast.success('Worktree archived')
@@ -589,8 +652,7 @@ export function MergeOnDoneDialog() {
           <div className="flex flex-col gap-3 py-2">
             <p className="text-xs text-muted-foreground">
               <code className="bg-muted px-1 rounded">{resolved.baseBranch}</code> has uncommitted
-              changes:{' '}
-              {resolved.baseUncommittedStats.filesChanged} files changed,{' '}
+              changes: {resolved.baseUncommittedStats.filesChanged} files changed,{' '}
               <span className="text-green-500">+{resolved.baseUncommittedStats.insertions}</span>{' '}
               <span className="text-red-500">-{resolved.baseUncommittedStats.deletions}</span>
             </p>
@@ -664,9 +726,9 @@ export function MergeOnDoneDialog() {
                 Merge into (base)
               </label>
               <p className="text-[11px] text-muted-foreground leading-snug">
-                Branches are listed from your repo. If no workspace is on the target branch, merge uses
-                your <span className="font-medium text-foreground/80">default</span> workspace: it
-                checks out the target branch there (needs a clean tree), then merges your feature
+                Branches are listed from your repo. If no workspace is on the target branch, merge
+                uses your <span className="font-medium text-foreground/80">default</span> workspace:
+                it checks out the target branch there (needs a clean tree), then merges your feature
                 branch in.
               </p>
               <Popover
@@ -697,7 +759,10 @@ export function MergeOnDoneDialog() {
                     />
                   </button>
                 </PopoverTrigger>
-                <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                <PopoverContent
+                  className="w-[var(--radix-popover-trigger-width)] p-0"
+                  align="start"
+                >
                   <div className="border-b px-2 py-1.5">
                     <div className="relative">
                       <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
