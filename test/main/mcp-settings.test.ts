@@ -167,6 +167,7 @@ describe('mcp-settings', () => {
   })
 
   it('passes the matching saved PAT to named Azure DevOps MCP servers', () => {
+    const expectedToken = Buffer.from(':vntrx-pat').toString('base64')
     const result = getConfiguredCodexMcpServers(
       createDb({
         app_settings: {
@@ -210,7 +211,41 @@ describe('mcp-settings', () => {
     expect(result?.['azure-devops-vntrx']).toEqual(
       expect.objectContaining({
         env: expect.objectContaining({
-          AZURE_DEVOPS_EXT_PAT: 'vntrx-pat'
+          AZURE_DEVOPS_EXT_PAT: 'vntrx-pat',
+          PERSONAL_ACCESS_TOKEN: expectedToken
+        })
+      })
+    )
+  })
+
+  it('base64 encodes raw PERSONAL_ACCESS_TOKEN values for Azure DevOps PAT auth', () => {
+    const expectedToken = Buffer.from(':raw-mcp-pat').toString('base64')
+
+    const result = getConfiguredCodexMcpServers(
+      createDb({
+        app_settings: {
+          mcpServers: [
+            {
+              id: 'ado-vntrx',
+              enabled: true,
+              name: 'azure-devops-vntrx',
+              transport: 'stdio',
+              command: 'npx',
+              args: '-y @azure-devops/mcp vntrx --authentication pat',
+              env: [{ name: 'PERSONAL_ACCESS_TOKEN', value: 'raw-mcp-pat' }],
+              url: '',
+              headers: []
+            }
+          ]
+        },
+        azure_devops_saved_configs: []
+      }) as never
+    )
+
+    expect(result?.['azure-devops-vntrx']).toEqual(
+      expect.objectContaining({
+        env: expect.objectContaining({
+          PERSONAL_ACCESS_TOKEN: expectedToken
         })
       })
     )

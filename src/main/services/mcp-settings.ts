@@ -152,6 +152,11 @@ function isAzureMcpServer(server: McpServerConfig): boolean {
   )
 }
 
+function isAzureDevOpsMcpServer(server: McpServerConfig): boolean {
+  const haystack = `${server.name} ${server.command} ${server.args} ${server.url}`.toLowerCase()
+  return haystack.includes('@azure-devops/mcp') || haystack.includes('azure-devops')
+}
+
 function normalizeAzureDevOpsOrganization(raw: unknown): string {
   if (typeof raw !== 'string') return ''
   const value = raw.trim().replace(/\/+$/, '')
@@ -214,6 +219,20 @@ function getSavedAzureDevOpsPatForServer(
   }
 }
 
+function normalizeAzureDevOpsPersonalAccessTokenEnv(raw: string): string {
+  const value = raw.trim().replace(/^["']|["']$/g, '')
+  if (!value) return value
+
+  try {
+    const decoded = Buffer.from(value, 'base64').toString('utf8')
+    if (decoded.startsWith(':') && decoded.length > 1) return value
+  } catch {
+    // Fall through and encode the raw PAT.
+  }
+
+  return Buffer.from(`:${value}`).toString('base64')
+}
+
 function getInheritedMcpEnvironment(
   dbService: DatabaseService | null,
   server: McpServerConfig
@@ -247,10 +266,18 @@ function getStdioMcpEnvironment(
   server: McpServerConfig,
   rows: McpKeyValue[]
 ): Record<string, string> {
-  return {
+  const env = {
     ...getInheritedMcpEnvironment(dbService, server),
     ...keyValuesToRecord(rows)
   }
+
+  if (isAzureDevOpsMcpServer(server)) {
+    const savedPat = getSavedAzureDevOpsPatForServer(dbService, server)
+    const pat = savedPat || env.PERSONAL_ACCESS_TOKEN
+    if (pat) env.PERSONAL_ACCESS_TOKEN = normalizeAzureDevOpsPersonalAccessTokenEnv(pat)
+  }
+
+  return env
 }
 
 function recordToKeyValues(record: Record<string, string>): McpKeyValue[] {
