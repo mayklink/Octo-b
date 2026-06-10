@@ -4,6 +4,9 @@ import type { JsonValue } from '@shared/codex-schemas/serde_json/JsonValue'
 import { APP_SETTINGS_DB_KEY } from '@shared/types/settings'
 import type { McpKeyValue, McpServerConfig, McpTransport } from '@shared/types/mcp'
 import type { DatabaseService } from '../db/database'
+import { getUserEnvironmentVariables } from './env-vars'
+
+const AZURE_DEVOPS_SAVED_CONFIGS_KEY = 'azure_devops_saved_configs'
 
 function normalizeKeyValues(value: unknown): McpKeyValue[] {
   if (!Array.isArray(value)) return []
@@ -44,6 +47,36 @@ function normalizeMcpServers(value: unknown): McpServerConfig[] {
     })
     .filter((server): server is McpServerConfig => server !== null)
 }
+
+const INHERITED_MCP_ENV_NAMES = new Set([
+  'PATH',
+  'Path',
+  'PATHEXT',
+  'HOME',
+  'HOMEDRIVE',
+  'HOMEPATH',
+  'USERPROFILE',
+  'APPDATA',
+  'LOCALAPPDATA',
+  'AZURE_AUTHORITY_HOST',
+  'AZURE_CLIENT_CERTIFICATE_PASSWORD',
+  'AZURE_CLIENT_CERTIFICATE_PATH',
+  'AZURE_CLIENT_ID',
+  'AZURE_CLIENT_SECRET',
+  'AZURE_CLOUD',
+  'AZURE_CONFIG_DIR',
+  'AZURE_DEVOPS_EXT_PAT',
+  'AZURE_FEDERATED_TOKEN_FILE',
+  'AZURE_PASSWORD',
+  'AZURE_TENANT_ID',
+  'AZURE_USERNAME',
+  'ADO_PAT',
+  'SYSTEM_ACCESSTOKEN',
+  'ARM_CLIENT_ID',
+  'ARM_CLIENT_SECRET',
+  'ARM_TENANT_ID',
+  'ARM_SUBSCRIPTION_ID'
+])
 
 export function splitCommandLineArgs(input: string): string[] {
   const args: string[] = []
@@ -93,6 +126,103 @@ export function splitCommandLineArgs(input: string): string[] {
   return args
 }
 
+function pickAllowedInheritedMcpEnvironment(
+  source: Record<string, string | undefined>
+): Record<string, string> {
+  const env: Record<string, string> = {}
+
+  for (const [name, value] of Object.entries(source)) {
+    if (typeof value !== 'string') continue
+    if (INHERITED_MCP_ENV_NAMES.has(name) || INHERITED_MCP_ENV_NAMES.has(name.toUpperCase())) {
+      env[name] = value
+    }
+  }
+
+  return env
+}
+
+function isAzureMcpServer(server: McpServerConfig): boolean {
+  return (
+    server.name.trim().toLowerCase() === 'azure' ||
+    server.command.toLowerCase().includes('azmcp') ||
+    server.args.toLowerCase().includes('@azure/mcp')
+  )
+}
+
+function getLatestSavedAzureDevOpsPat(dbService: DatabaseService | null): string | null {
+  if (!dbService) return null
+
+  try {
+    const raw = dbService.getSetting(AZURE_DEVOPS_SAVED_CONFIGS_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return null
+
+    const configs = parsed
+      .map((row) => {
+        if (!row || typeof row !== 'object') return null
+        const typed = row as {
+          settings?: Record<string, unknown>
+          updatedAt?: unknown
+        }
+        const patRaw = typed.settings?.azure_devops_pat
+        const pat = typeof patRaw === 'string' ? patRaw.trim().replace(/^["']|["']$/g, '') : ''
+        if (!pat) return null
+        const updatedAt = typeof typed.updatedAt === 'string' ? typed.updatedAt : ''
+        return { pat, updatedAt }
+      })
+      .filter((row): row is { pat: string; updatedAt: string } => row !== null)
+
+    configs.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+    return configs[0]?.pat ?? null
+  } catch {
+    return null
+  }
+}
+
+function getInheritedMcpEnvironment(
+  dbService: DatabaseService | null,
+  server: McpServerConfig
+): Record<string, string> {
+  const env = {
+    ...pickAllowedInheritedMcpEnvironment(process.env),
+    ...pickAllowedInheritedMcpEnvironment(getUserEnvironmentVariables(dbService))
+  }
+
+  if (isAzureMcpServer(server) && !env.AZURE_DEVOPS_EXT_PAT) {
+    const savedPat = getLatestSavedAzureDevOpsPat(dbService)
+    if (savedPat) env.AZURE_DEVOPS_EXT_PAT = savedPat
+  }
+
+  return {
+    ...env
+  }
+}
+
+function keyValuesToRecord(rows: McpKeyValue[]): Record<string, string> {
+  const record: Record<string, string> = {}
+  for (const row of rows) {
+    const name = row.name.trim()
+    if (name) record[name] = row.value
+  }
+  return record
+}
+
+function getStdioMcpEnvironment(
+  dbService: DatabaseService | null,
+  server: McpServerConfig,
+  rows: McpKeyValue[]
+): Record<string, string> {
+  return {
+    ...getInheritedMcpEnvironment(dbService, server),
+    ...keyValuesToRecord(rows)
+  }
+}
+
+function recordToKeyValues(record: Record<string, string>): McpKeyValue[] {
+  return Object.entries(record).map(([name, value]) => ({ name, value }))
+}
+
 export function getConfiguredMcpServers(dbService: DatabaseService | null): McpServer[] {
   if (!dbService) return []
 
@@ -114,10 +244,7 @@ export function getConfiguredMcpServers(dbService: DatabaseService | null): McpS
             name,
             command,
             args: splitCommandLineArgs(server.args),
-            env: server.env.filter((row) => row.name.trim()).map((row) => ({
-              name: row.name.trim(),
-              value: row.value
-            }))
+            env: recordToKeyValues(getStdioMcpEnvironment(dbService, server, server.env))
           }
         }
 
@@ -137,15 +264,6 @@ export function getConfiguredMcpServers(dbService: DatabaseService | null): McpS
   } catch {
     return []
   }
-}
-
-function keyValuesToRecord(rows: McpKeyValue[]): Record<string, string> {
-  const record: Record<string, string> = {}
-  for (const row of rows) {
-    const name = row.name.trim()
-    if (name) record[name] = row.value
-  }
-  return record
 }
 
 export function getConfiguredCodexMcpServers(
@@ -173,7 +291,7 @@ export function getConfiguredCodexMcpServers(
           command,
           args: splitCommandLineArgs(server.args)
         }
-        const env = keyValuesToRecord(server.env)
+        const env = getStdioMcpEnvironment(dbService, server, server.env)
         if (Object.keys(env).length > 0) config.env = env
 
         entries.push([name, config])
@@ -222,7 +340,7 @@ export function getConfiguredClaudeMcpServers(
           command,
           args: splitCommandLineArgs(server.args)
         }
-        const env = keyValuesToRecord(server.env)
+        const env = getStdioMcpEnvironment(dbService, server, server.env)
         if (Object.keys(env).length > 0) config.env = env
 
         entries.push([name, config])
