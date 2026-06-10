@@ -165,4 +165,54 @@ describe('mcp-settings', () => {
       })
     )
   })
+
+  it('passes the matching saved PAT to named Azure DevOps MCP servers', () => {
+    const result = getConfiguredCodexMcpServers(
+      createDb({
+        app_settings: {
+          mcpServers: [
+            {
+              id: 'ado-vntrx',
+              enabled: true,
+              name: 'azure-devops-vntrx',
+              transport: 'stdio',
+              command: 'npx',
+              args: '-y azure-devops-mcp',
+              env: [],
+              url: '',
+              headers: []
+            }
+          ]
+        },
+        azure_devops_saved_configs: [
+          {
+            id: 'other',
+            updatedAt: '2026-03-01T00:00:00.000Z',
+            settings: {
+              azure_devops_organization: 'other-org',
+              azure_devops_project: 'Other',
+              azure_devops_pat: 'wrong-pat'
+            }
+          },
+          {
+            id: 'vntrx',
+            updatedAt: '2026-02-01T00:00:00.000Z',
+            settings: {
+              azure_devops_organization: 'vntrx',
+              azure_devops_project: 'V ERP',
+              azure_devops_pat: 'vntrx-pat'
+            }
+          }
+        ]
+      }) as never
+    )
+
+    expect(result?.['azure-devops-vntrx']).toEqual(
+      expect.objectContaining({
+        env: expect.objectContaining({
+          AZURE_DEVOPS_EXT_PAT: 'vntrx-pat'
+        })
+      })
+    )
+  })
 })

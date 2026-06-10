@@ -142,14 +142,47 @@ function pickAllowedInheritedMcpEnvironment(
 }
 
 function isAzureMcpServer(server: McpServerConfig): boolean {
+  const haystack = `${server.name} ${server.command} ${server.args} ${server.url}`.toLowerCase()
   return (
-    server.name.trim().toLowerCase() === 'azure' ||
-    server.command.toLowerCase().includes('azmcp') ||
-    server.args.toLowerCase().includes('@azure/mcp')
+    haystack.includes('azure') ||
+    haystack.includes('azmcp') ||
+    haystack.includes('devops') ||
+    haystack.includes('ado') ||
+    haystack.includes('@azure/mcp')
   )
 }
 
-function getLatestSavedAzureDevOpsPat(dbService: DatabaseService | null): string | null {
+function normalizeAzureDevOpsOrganization(raw: unknown): string {
+  if (typeof raw !== 'string') return ''
+  const value = raw.trim().replace(/\/+$/, '')
+  const devAzureMatch = value.match(/dev\.azure\.com\/([^/]+)/i)
+  if (devAzureMatch?.[1]) return decodeURIComponent(devAzureMatch[1]).toLowerCase()
+  const visualStudioMatch = value.match(/(?:https?:\/\/)?([^.]+)\.visualstudio\.com(?:\/|$)/i)
+  if (visualStudioMatch?.[1]) return visualStudioMatch[1].toLowerCase()
+  return value.replace(/^https?:\/\//i, '').split('/')[0]?.toLowerCase() ?? ''
+}
+
+function scoreAzureDevOpsConfigForServer(
+  server: McpServerConfig,
+  settings: Record<string, unknown>
+): number {
+  const haystack = `${server.name} ${server.command} ${server.args} ${server.url}`.toLowerCase()
+  const organization = normalizeAzureDevOpsOrganization(settings.azure_devops_organization)
+  const project =
+    typeof settings.azure_devops_project === 'string'
+      ? settings.azure_devops_project.trim().toLowerCase()
+      : ''
+
+  let score = 0
+  if (organization && haystack.includes(organization)) score += 2
+  if (project && haystack.includes(project)) score += 1
+  return score
+}
+
+function getSavedAzureDevOpsPatForServer(
+  dbService: DatabaseService | null,
+  server: McpServerConfig
+): string | null {
   if (!dbService) return null
 
   try {
@@ -169,11 +202,12 @@ function getLatestSavedAzureDevOpsPat(dbService: DatabaseService | null): string
         const pat = typeof patRaw === 'string' ? patRaw.trim().replace(/^["']|["']$/g, '') : ''
         if (!pat) return null
         const updatedAt = typeof typed.updatedAt === 'string' ? typed.updatedAt : ''
-        return { pat, updatedAt }
+        const score = typed.settings ? scoreAzureDevOpsConfigForServer(server, typed.settings) : 0
+        return { pat, updatedAt, score }
       })
-      .filter((row): row is { pat: string; updatedAt: string } => row !== null)
+      .filter((row): row is { pat: string; updatedAt: string; score: number } => row !== null)
 
-    configs.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+    configs.sort((a, b) => b.score - a.score || b.updatedAt.localeCompare(a.updatedAt))
     return configs[0]?.pat ?? null
   } catch {
     return null
@@ -190,7 +224,7 @@ function getInheritedMcpEnvironment(
   }
 
   if (isAzureMcpServer(server) && !env.AZURE_DEVOPS_EXT_PAT) {
-    const savedPat = getLatestSavedAzureDevOpsPat(dbService)
+    const savedPat = getSavedAzureDevOpsPatForServer(dbService, server)
     if (savedPat) env.AZURE_DEVOPS_EXT_PAT = savedPat
   }
 
