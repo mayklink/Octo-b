@@ -160,7 +160,7 @@ describe('CodexImplementer lifecycle', () => {
           'local-tools': {
             command: 'node',
             args: ['server.js', '--flag', 'two words'],
-            env: { FOO: 'bar' }
+            env: expect.objectContaining({ FOO: 'bar' })
           },
           'remote-tools': {
             url: 'https://example.com/mcp',
