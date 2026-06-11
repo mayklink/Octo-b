@@ -22,7 +22,7 @@ afterEach(() => {
 })
 
 describe('mcp-settings', () => {
-  it('passes inherited Azure DevOps auth env to Codex stdio MCP servers', () => {
+  it('does not pass inherited Azure DevOps auth env to Codex stdio MCP servers', () => {
     process.env.AZURE_DEVOPS_EXT_PAT = 'from-env'
 
     const result = getConfiguredCodexMcpServers(
@@ -47,8 +47,8 @@ describe('mcp-settings', () => {
 
     expect(result?.Azure).toEqual(
       expect.objectContaining({
-        env: expect.objectContaining({
-          AZURE_DEVOPS_EXT_PAT: 'from-env'
+        env: expect.not.objectContaining({
+          AZURE_DEVOPS_EXT_PAT: expect.any(String)
         })
       })
     )
@@ -83,7 +83,7 @@ describe('mcp-settings', () => {
     })
   })
 
-  it('passes saved Octob environment variables to stdio MCP servers', () => {
+  it('does not pass saved Octob environment variables to stdio MCP servers', () => {
     const result = getConfiguredCodexMcpServers(
       createDb({
         app_settings: {
@@ -110,8 +110,8 @@ describe('mcp-settings', () => {
 
     expect(result?.Azure).toEqual(
       expect.objectContaining({
-        env: expect.objectContaining({
-          AZURE_DEVOPS_EXT_PAT: 'from-octob-env'
+        env: expect.not.objectContaining({
+          AZURE_DEVOPS_EXT_PAT: expect.any(String)
         })
       })
     )
@@ -124,7 +124,7 @@ describe('mcp-settings', () => {
     )
   })
 
-  it('passes the latest saved Azure DevOps PAT to Azure MCP servers', () => {
+  it('does not pass unrelated saved Azure DevOps PAT to generic Azure MCP servers', () => {
     const result = getConfiguredCodexMcpServers(
       createDb({
         app_settings: {
@@ -159,15 +159,14 @@ describe('mcp-settings', () => {
 
     expect(result?.Azure).toEqual(
       expect.objectContaining({
-        env: expect.objectContaining({
-          AZURE_DEVOPS_EXT_PAT: 'new-pat'
+        env: expect.not.objectContaining({
+          AZURE_DEVOPS_EXT_PAT: expect.any(String)
         })
       })
     )
   })
 
-  it('passes the matching saved PAT to named Azure DevOps MCP servers', () => {
-    const expectedToken = Buffer.from(':vntrx-pat').toString('base64')
+  it('does not pass matching saved PAT to named Azure DevOps MCP servers without MCP env', () => {
     const result = getConfiguredCodexMcpServers(
       createDb({
         app_settings: {
@@ -210,9 +209,9 @@ describe('mcp-settings', () => {
 
     expect(result?.['azure-devops-vntrx']).toEqual(
       expect.objectContaining({
-        env: expect.objectContaining({
-          AZURE_DEVOPS_EXT_PAT: 'vntrx-pat',
-          PERSONAL_ACCESS_TOKEN: expectedToken
+        env: expect.not.objectContaining({
+          AZURE_DEVOPS_EXT_PAT: expect.any(String),
+          PERSONAL_ACCESS_TOKEN: expect.any(String)
         })
       })
     )
@@ -243,6 +242,49 @@ describe('mcp-settings', () => {
     )
 
     expect(result?.['azure-devops-vntrx']).toEqual(
+      expect.objectContaining({
+        env: expect.objectContaining({
+          PERSONAL_ACCESS_TOKEN: expectedToken
+        })
+      })
+    )
+  })
+
+  it('does not override explicit Azure DevOps MCP PAT with an unrelated saved config', () => {
+    const expectedToken = Buffer.from(':old-mayk-pat').toString('base64')
+
+    const result = getConfiguredCodexMcpServers(
+      createDb({
+        app_settings: {
+          mcpServers: [
+            {
+              id: 'ado-old-mayk',
+              enabled: true,
+              name: 'azure-devops-old-mayk',
+              transport: 'stdio',
+              command: 'npx',
+              args: '-y @azure-devops/mcp old-mayk --authentication pat',
+              env: [{ name: 'PERSONAL_ACCESS_TOKEN', value: 'old-mayk-pat' }],
+              url: '',
+              headers: []
+            }
+          ]
+        },
+        azure_devops_saved_configs: [
+          {
+            id: 'vntrx',
+            updatedAt: '2026-06-09T13:50:54.739Z',
+            settings: {
+              azure_devops_organization: 'vntrx',
+              azure_devops_project: 'V ERP',
+              azure_devops_pat: 'vntrx-pat'
+            }
+          }
+        ]
+      }) as never
+    )
+
+    expect(result?.['azure-devops-old-mayk']).toEqual(
       expect.objectContaining({
         env: expect.objectContaining({
           PERSONAL_ACCESS_TOKEN: expectedToken
