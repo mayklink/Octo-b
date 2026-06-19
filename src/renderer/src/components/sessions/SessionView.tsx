@@ -13,6 +13,14 @@ import {
   Terminal
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle
+} from '@/components/ui/dialog'
+import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
 import { ProviderIcon } from '@/components/ui/provider-icon'
 import { toast } from '@/lib/toast'
@@ -42,6 +50,7 @@ import { SlashCommandPopover } from './SlashCommandPopover'
 import { FileMentionPopover } from './FileMentionPopover'
 import { ScrollToBottomFab } from './ScrollToBottomFab'
 import { PlanReadyImplementFab } from './PlanReadyImplementFab'
+import { PromptTemplateMenu } from './PromptTemplateMenu'
 import { IndeterminateProgressBar } from './IndeterminateProgressBar'
 import { TaskListWidget } from './TaskListWidget'
 import { useLatestTodoList } from './useLatestTodoList'
@@ -543,6 +552,8 @@ export function SessionView({ sessionId }: SessionViewProps): React.JSX.Element 
   // State
   const [messages, setMessagesState] = useState<OpenCodeMessage[]>([])
   const [inputValue, setInputValue] = useState('')
+  const [planTemplatePrompt, setPlanTemplatePrompt] = useState('')
+  const [planTemplateDialogOpen, setPlanTemplateDialogOpen] = useState(false)
   const [viewState, setViewState] = useState<SessionViewState>({ status: 'connecting' })
   const [isSending, setIsSending] = useState(false)
   const [queuedMessages, setQueuedMessages] = useState<
@@ -636,7 +647,12 @@ export function SessionView({ sessionId }: SessionViewProps): React.JSX.Element 
     isStreamingRef.current = isStreaming
   }, [isStreaming])
   const [isCompacting, setIsCompacting] = useState(false)
-  const { runs: bashRuns, isRunning: isBashRunning, runCommand: runBashCommand, abort: abortBash } = useBashRuns(sessionId)
+  const {
+    runs: bashRuns,
+    isRunning: isBashRunning,
+    runCommand: runBashCommand,
+    abort: abortBash
+  } = useBashRuns(sessionId)
   const isBashMode = inputValue.startsWith('!') && !!worktreePath
   const [sessionRetry, setSessionRetry] = useState<SessionRetryState | null>(null)
   const [sessionErrorMessage, setSessionErrorMessage] = useState<string | null>(null)
@@ -670,7 +686,8 @@ export function SessionView({ sessionId }: SessionViewProps): React.JSX.Element 
     setQueuedMessages((prev) => {
       const sameLength = prev.length === persistedFollowUpMessages.length
       const sameContent =
-        sameLength && prev.every((entry, index) => entry.content === persistedFollowUpMessages[index])
+        sameLength &&
+        prev.every((entry, index) => entry.content === persistedFollowUpMessages[index])
       if (sameContent) return prev
 
       const matched = new Set<number>()
@@ -710,7 +727,8 @@ export function SessionView({ sessionId }: SessionViewProps): React.JSX.Element 
   const sessionAgentSdk = sessionRecord?.agent_sdk ?? 'opencode'
   // Steer capability: available when backend supports it AND a turn is actively streaming
   // Falls back to checking sessionAgentSdk when capabilities haven't loaded yet (race condition)
-  const canSteer = (sessionCapabilities?.supportsSteer ?? sessionAgentSdk === 'codex') && isStreaming
+  const canSteer =
+    (sessionCapabilities?.supportsSteer ?? sessionAgentSdk === 'codex') && isStreaming
   const globalModel = useSettingsStore((state) => resolveModelForSdk(sessionAgentSdk, state))
   const effectiveModel: SelectedModel | null =
     sessionRecord?.model_provider_id && sessionRecord.model_id
@@ -990,9 +1008,7 @@ export function SessionView({ sessionId }: SessionViewProps): React.JSX.Element 
 
   const setMessages = useCallback(
     (
-      nextMessages:
-        | OpenCodeMessage[]
-        | ((currentMessages: OpenCodeMessage[]) => OpenCodeMessage[])
+      nextMessages: OpenCodeMessage[] | ((currentMessages: OpenCodeMessage[]) => OpenCodeMessage[])
     ) => {
       const shouldRestoreViewport = captureLockedViewportAnchor()
       setMessagesState(nextMessages)
@@ -1813,11 +1829,9 @@ export function SessionView({ sessionId }: SessionViewProps): React.JSX.Element 
               setOpencodeSessionId(newId)
               transcriptSourceRef.current.opencodeSessionId = newId
               useSessionStore.getState().setOpenCodeSessionId(sessionId, newId)
-              void window.db.session
-                .update(sessionId, { opencode_session_id: newId })
-                .catch(() => {
-                  /* non-fatal */
-                })
+              void window.db.session.update(sessionId, { opencode_session_id: newId }).catch(() => {
+                /* non-fatal */
+              })
 
               // On fork, the new session has its own transcript. Clear old
               // messages so the user only sees the local prompt bubble while
@@ -2832,9 +2846,9 @@ export function SessionView({ sessionId }: SessionViewProps): React.JSX.Element 
               providerID: session.model_provider_id,
               modelID: session.model_id,
               variant: session.model_variant ?? undefined,
-              ...(hydrateSdk !== 'opencode' && hydrateSdk !== 'terminal' ?
-                { agentSdk: hydrateSdk }
-              : {})
+              ...(hydrateSdk !== 'opencode' && hydrateSdk !== 'terminal'
+                ? { agentSdk: hydrateSdk }
+                : {})
             })
             .catch((error) => {
               console.error('Failed to hydrate session model from database:', error)
@@ -3013,9 +3027,9 @@ export function SessionView({ sessionId }: SessionViewProps): React.JSX.Element 
         const dbAgentSdk = session.agent_sdk ?? 'opencode'
         const fetchModelLimits = (): void => {
           const listModelsPromise =
-            dbAgentSdk !== 'opencode' && dbAgentSdk !== 'terminal' ?
-              window.opencodeOps.listModels({ agentSdk: dbAgentSdk })
-            : window.opencodeOps.listModels()
+            dbAgentSdk !== 'opencode' && dbAgentSdk !== 'terminal'
+              ? window.opencodeOps.listModels({ agentSdk: dbAgentSdk })
+              : window.opencodeOps.listModels()
 
           listModelsPromise
             .then((result) => {
@@ -3910,7 +3924,8 @@ export function SessionView({ sessionId }: SessionViewProps): React.JSX.Element 
           }
 
           // Remove the steered message from the follow-up queue by content
-          const currentFollowUps = useSessionStore.getState().pendingFollowUpMessages.get(sessionId) ?? []
+          const currentFollowUps =
+            useSessionStore.getState().pendingFollowUpMessages.get(sessionId) ?? []
           const indexToRemove = currentFollowUps.indexOf(content)
           if (indexToRemove >= 0) {
             const updatedFollowUps = [
@@ -4715,31 +4730,61 @@ export function SessionView({ sessionId }: SessionViewProps): React.JSX.Element 
     ]
   )
 
-  const handlePlanReadyHandoff = useCallback(async (override?: HandoffSelectionOverride) => {
-    const planContent =
-      pendingPlan?.planContent ??
-      [...messages].reverse().find((m) => m.role === 'assistant' && m.content.trim().length > 0)
-        ?.content
-    if (!planContent) {
-      toast.error('No plan content found to hand off')
-      return
-    }
+  const handlePlanReadyHandoff = useCallback(
+    async (override?: HandoffSelectionOverride) => {
+      const planContent =
+        pendingPlan?.planContent ??
+        [...messages].reverse().find((m) => m.role === 'assistant' && m.content.trim().length > 0)
+          ?.content
+      if (!planContent) {
+        toast.error('No plan content found to hand off')
+        return
+      }
 
-    useSessionStore.getState().clearPendingPlan(sessionId)
-    useWorktreeStatusStore.getState().clearSessionStatus(sessionId)
-    lastSendMode.delete(sessionId)
+      useSessionStore.getState().clearPendingPlan(sessionId)
+      useWorktreeStatusStore.getState().clearSessionStatus(sessionId)
+      lastSendMode.delete(sessionId)
 
-    // Abort the original backend session so it stops spinning
-    if (worktreePath && opencodeSessionId) {
-      useCommandApprovalStore.getState().clearSession(sessionId)
-      await window.opencodeOps.abort(worktreePath, opencodeSessionId)
-    }
+      // Abort the original backend session so it stops spinning
+      if (worktreePath && opencodeSessionId) {
+        useCommandApprovalStore.getState().clearSession(sessionId)
+        await window.opencodeOps.abort(worktreePath, opencodeSessionId)
+      }
 
-    if (connectionId) {
+      if (connectionId) {
+        const handoffPrompt = `Implement the following plan\n${planContent}`
+        const sessionStore = useSessionStore.getState()
+        const result = await sessionStore.createConnectionSession(
+          connectionId,
+          override?.agentSdk,
+          undefined,
+          { modelOverride: override?.model }
+        )
+        if (!result.success || !result.session) {
+          toast.error(result.error ?? 'Failed to create handoff session')
+          return
+        }
+        const setModePromise = sessionStore.setSessionMode(result.session.id, 'build')
+        sessionStore.setPendingMessage(result.session.id, handoffPrompt)
+        await useKanbanStore.getState().relinkTicketsForHandoff(sessionId, result.session.id)
+        sessionStore.setActiveConnectionSession(result.session.id)
+        await setModePromise
+        return
+      }
+
+      const currentWorktreeId = worktreeId
+      const currentProjectId = sessionRecord?.project_id
+      if (!currentWorktreeId || !currentProjectId) {
+        toast.error('Could not start handoff session')
+        return
+      }
+
       const handoffPrompt = `Implement the following plan\n${planContent}`
+
       const sessionStore = useSessionStore.getState()
-      const result = await sessionStore.createConnectionSession(
-        connectionId,
+      const result = await sessionStore.createSession(
+        currentWorktreeId,
+        currentProjectId,
         override?.agentSdk,
         undefined,
         { modelOverride: override?.model }
@@ -4748,55 +4793,24 @@ export function SessionView({ sessionId }: SessionViewProps): React.JSX.Element 
         toast.error(result.error ?? 'Failed to create handoff session')
         return
       }
+
       const setModePromise = sessionStore.setSessionMode(result.session.id, 'build')
       sessionStore.setPendingMessage(result.session.id, handoffPrompt)
-      await useKanbanStore
-        .getState()
-        .relinkTicketsForHandoff(sessionId, result.session.id)
-      sessionStore.setActiveConnectionSession(result.session.id)
+      await useKanbanStore.getState().relinkTicketsForHandoff(sessionId, result.session.id)
+      sessionStore.setActiveSession(result.session.id)
       await setModePromise
-      return
-    }
-
-    const currentWorktreeId = worktreeId
-    const currentProjectId = sessionRecord?.project_id
-    if (!currentWorktreeId || !currentProjectId) {
-      toast.error('Could not start handoff session')
-      return
-    }
-
-    const handoffPrompt = `Implement the following plan\n${planContent}`
-
-    const sessionStore = useSessionStore.getState()
-    const result = await sessionStore.createSession(
-      currentWorktreeId,
-      currentProjectId,
-      override?.agentSdk,
-      undefined,
-      { modelOverride: override?.model }
-    )
-    if (!result.success || !result.session) {
-      toast.error(result.error ?? 'Failed to create handoff session')
-      return
-    }
-
-    const setModePromise = sessionStore.setSessionMode(result.session.id, 'build')
-    sessionStore.setPendingMessage(result.session.id, handoffPrompt)
-    await useKanbanStore
-      .getState()
-      .relinkTicketsForHandoff(sessionId, result.session.id)
-    sessionStore.setActiveSession(result.session.id)
-    await setModePromise
-  }, [
-    messages,
-    worktreeId,
-    sessionRecord?.project_id,
-    connectionId,
-    sessionId,
-    worktreePath,
-    opencodeSessionId,
-    pendingPlan
-  ])
+    },
+    [
+      messages,
+      worktreeId,
+      sessionRecord?.project_id,
+      connectionId,
+      sessionId,
+      worktreePath,
+      opencodeSessionId,
+      pendingPlan
+    ]
+  )
 
   const handlePlanReadyCopyPlan = useCallback(async () => {
     const planContent =
@@ -4815,6 +4829,92 @@ export function SessionView({ sessionId }: SessionViewProps): React.JSX.Element 
       toast.error('Failed to copy')
     }
   }, [messages, pendingPlan?.planContent])
+
+  const handlePlanReadyTemplateSelect = useCallback(
+    (templateBody: string) => {
+      const planContent =
+        pendingPlan?.planContent ??
+        [...messages].reverse().find((m) => m.role === 'assistant' && m.content.trim().length > 0)
+          ?.content
+
+      if (!planContent || !planContent.trim()) {
+        toast.error('No plan content found')
+        return
+      }
+
+      const body = templateBody.trim() || 'Implement the following plan.'
+      setPlanTemplatePrompt(`${body}\n\nImplement the following plan:\n${planContent.trim()}`)
+      setPlanTemplateDialogOpen(true)
+    },
+    [messages, pendingPlan]
+  )
+
+  const handlePlanReadyTemplateImplement = useCallback(async () => {
+    const prompt = planTemplatePrompt.trim()
+    if (!prompt) return
+
+    useSessionStore.getState().clearPendingPlan(sessionId)
+    useWorktreeStatusStore.getState().clearSessionStatus(sessionId)
+    lastSendMode.delete(sessionId)
+
+    if (worktreePath && opencodeSessionId) {
+      useCommandApprovalStore.getState().clearSession(sessionId)
+      await window.opencodeOps.abort(worktreePath, opencodeSessionId)
+    }
+
+    const sessionStore = useSessionStore.getState()
+    const currentAgentSdk = sessionRecord?.agent_sdk
+    const agentSdk =
+      currentAgentSdk === 'opencode' ||
+      currentAgentSdk === 'claude-code' ||
+      currentAgentSdk === 'codex' ||
+      currentAgentSdk === 'terminal'
+        ? currentAgentSdk
+        : undefined
+
+    if (connectionId) {
+      const result = await sessionStore.createConnectionSession(connectionId, agentSdk)
+      if (!result.success || !result.session) {
+        toast.error(result.error ?? 'Failed to create implementation session')
+        return
+      }
+
+      const setModePromise = sessionStore.setSessionMode(result.session.id, 'build')
+      sessionStore.setPendingMessage(result.session.id, prompt)
+      await useKanbanStore.getState().relinkTicketsForHandoff(sessionId, result.session.id)
+      sessionStore.setActiveConnectionSession(result.session.id)
+      await setModePromise
+      setPlanTemplateDialogOpen(false)
+      return
+    }
+
+    if (!worktreeId || !sessionRecord?.project_id) {
+      toast.error('Could not start implementation session')
+      return
+    }
+
+    const result = await sessionStore.createSession(worktreeId, sessionRecord.project_id, agentSdk)
+    if (!result.success || !result.session) {
+      toast.error(result.error ?? 'Failed to create implementation session')
+      return
+    }
+
+    const setModePromise = sessionStore.setSessionMode(result.session.id, 'build')
+    sessionStore.setPendingMessage(result.session.id, prompt)
+    await useKanbanStore.getState().relinkTicketsForHandoff(sessionId, result.session.id)
+    sessionStore.setActiveSession(result.session.id)
+    await setModePromise
+    setPlanTemplateDialogOpen(false)
+  }, [
+    connectionId,
+    opencodeSessionId,
+    planTemplatePrompt,
+    sessionId,
+    sessionRecord?.agent_sdk,
+    sessionRecord?.project_id,
+    worktreeId,
+    worktreePath
+  ])
 
   const handlePlanReadySuperpowers = useCallback(async () => {
     // 1. Extract plan content
@@ -5239,6 +5339,33 @@ export function SessionView({ sessionId }: SessionViewProps): React.JSX.Element 
     textareaRef.current?.focus()
   }, [])
 
+  const handlePromptTemplateSelect = useCallback((templateBody: string) => {
+    const template = templateBody.trim()
+    if (!template) return
+
+    const textarea = textareaRef.current
+    const current = inputValueRef.current
+    const selectionStart = textarea?.selectionStart ?? current.length
+    const selectionEnd = textarea?.selectionEnd ?? selectionStart
+    const prefix = current.slice(0, selectionStart)
+    const suffix = current.slice(selectionEnd)
+    const separatorBefore = prefix && !prefix.endsWith('\n') ? '\n\n' : ''
+    const separatorAfter = suffix && !suffix.startsWith('\n') ? '\n\n' : ''
+    const nextValue = `${prefix}${separatorBefore}${template}${separatorAfter}${suffix}`
+    const nextCursor = prefix.length + separatorBefore.length + template.length
+
+    setInputValue(nextValue)
+    inputValueRef.current = nextValue
+    setShowSlashCommands(false)
+    cursorPositionRef.current = nextCursor
+    setCursorPosition(nextCursor)
+
+    requestAnimationFrame(() => {
+      textareaRef.current?.focus()
+      textareaRef.current?.setSelectionRange(nextCursor, nextCursor)
+    })
+  }, [])
+
   // File mention selection handler
   const handleFileMentionSelect = useCallback(
     (file: { name: string; path: string; relativePath: string; extension: string | null }) => {
@@ -5499,8 +5626,10 @@ export function SessionView({ sessionId }: SessionViewProps): React.JSX.Element 
     return visibleMessages
   }, [isStreaming, visibleMessages])
 
-  const { todos: latestTodos, isIncomplete: latestTodosIncomplete } =
-    useLatestTodoList(currentTurnMessages, streamingMessage)
+  const { todos: latestTodos, isIncomplete: latestTodosIncomplete } = useLatestTodoList(
+    currentTurnMessages,
+    streamingMessage
+  )
   const taskListTopOffsetPx = usePRStackTopOffset()
 
   const handleRedoRevert = useCallback(() => {
@@ -5716,6 +5845,7 @@ export function SessionView({ sessionId }: SessionViewProps): React.JSX.Element 
         )}
         <PlanReadyImplementFab
           onImplement={handlePlanReadyImplement}
+          onImplementWithTemplate={handlePlanReadyTemplateSelect}
           onHandoff={handlePlanReadyHandoff}
           onCopyPlan={handlePlanReadyCopyPlan}
           worktreeId={worktreeId ?? undefined}
@@ -5860,7 +5990,9 @@ export function SessionView({ sessionId }: SessionViewProps): React.JSX.Element 
               disabled={!!activePermission || isOrphanedSession}
               placeholder={
                 isBashMode
-                  ? (inputValue.slice(1).trim() ? 'Press Enter to run' : 'Type a command')
+                  ? inputValue.slice(1).trim()
+                    ? 'Press Enter to run'
+                    : 'Type a command'
                   : isOrphanedSession
                     ? 'Read-only mode - cannot send messages'
                     : activePermission
@@ -5900,6 +6032,11 @@ export function SessionView({ sessionId }: SessionViewProps): React.JSX.Element 
                   projectId={sessionRecord?.project_id ?? null}
                   onPickTicket={() => setTicketPickerOpen(true)}
                   disabled={isOrphanedSession}
+                />
+                <PromptTemplateMenu
+                  onSelect={handlePromptTemplateSelect}
+                  disabled={isOrphanedSession}
+                  testId="session-prompt-template-menu"
                 />
                 <ContextIndicator
                   sessionId={sessionId}
@@ -6006,6 +6143,38 @@ export function SessionView({ sessionId }: SessionViewProps): React.JSX.Element 
           </div>
         </div>
       </div>
+
+      <Dialog open={planTemplateDialogOpen} onOpenChange={setPlanTemplateDialogOpen}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Implement with template</DialogTitle>
+          </DialogHeader>
+          <Textarea
+            value={planTemplatePrompt}
+            onChange={(event) => setPlanTemplatePrompt(event.target.value)}
+            rows={14}
+            className="resize-y font-mono text-xs leading-relaxed"
+            data-testid="plan-template-implementation-prompt"
+          />
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setPlanTemplateDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={() => void handlePlanReadyTemplateImplement()}
+              disabled={!planTemplatePrompt.trim()}
+              data-testid="plan-template-implement-confirm"
+            >
+              Implement
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Ticket picker modal for attaching board tickets */}
       {sessionRecord?.project_id && (
