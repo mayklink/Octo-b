@@ -1,5 +1,6 @@
 import { cn } from '@/lib/utils'
 import { HandoffSplitButton } from './HandoffSplitButton'
+import { PromptTemplateMenu } from './PromptTemplateMenu'
 import type { HandoffSelectionOverride } from '@/lib/handoffSelection'
 import { useSettingsStore } from '@/stores/useSettingsStore'
 
@@ -19,6 +20,7 @@ function MnemonicLabel({ letter, label }: { letter: string; label: string }): Re
 
 interface PlanReadyImplementFabProps {
   onImplement: () => void
+  onImplementWithTemplate?: (templateBody: string) => void
   onHandoff: (override: HandoffSelectionOverride) => void
   onCopyPlan: () => void
   visible: boolean
@@ -32,6 +34,7 @@ interface PlanReadyImplementFabProps {
 
 export function PlanReadyImplementFab({
   onImplement,
+  onImplementWithTemplate,
   onHandoff,
   onCopyPlan,
   visible,
@@ -85,6 +88,14 @@ export function PlanReadyImplementFab({
       >
         {vimModeEnabled ? <MnemonicLabel letter="c" label="Copy plan" /> : 'Copy plan'}
       </button>
+      {onImplementWithTemplate && (
+        <div className={cn(visible ? 'opacity-100' : 'opacity-0')}>
+          <PromptTemplateMenu
+            onSelect={onImplementWithTemplate}
+            testId="plan-ready-template-menu"
+          />
+        </div>
+      )}
       <div className={cn(visible ? 'opacity-100' : 'opacity-0')}>
         <HandoffSplitButton
           worktreeId={worktreeId}

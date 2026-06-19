@@ -42,6 +42,7 @@ vi.mock('../../../src/renderer/src/components/sessions/HandoffSplitButton', () =
 import { ToolCallContextMenu } from '../../../src/renderer/src/components/sessions/ToolCallContextMenu'
 import { PlanReadyImplementFab } from '../../../src/renderer/src/components/sessions/PlanReadyImplementFab'
 import { useSessionStore } from '../../../src/renderer/src/stores/useSessionStore'
+import { useSettingsStore } from '../../../src/renderer/src/stores/useSettingsStore'
 import type { ToolUseInfo } from '../../../src/renderer/src/components/sessions/ToolCard'
 
 function makeToolUse(overrides: Partial<ToolUseInfo> = {}): ToolUseInfo {
@@ -71,6 +72,9 @@ beforeEach(() => {
   toastError.mockClear()
   // Reset the pendingPlans map between tests.
   useSessionStore.setState({ pendingPlans: new Map() })
+  useSettingsStore.setState({
+    taskSessionPromptTemplates: [{ id: 'tpl-1', name: 'Run loop', body: 'Implement, test, fix.' }]
+  })
 })
 
 afterEach(() => {
@@ -207,17 +211,19 @@ describe('PlanReadyImplementFab — Copy plan button', () => {
     expect(btn).toHaveTextContent('Copy plan')
   })
 
-  test('button sits between Save-as-ticket and Handoff in DOM order', () => {
-    renderFab()
+  test('template menu sits between Copy plan and Handoff in DOM order', () => {
+    renderFab({ onImplementWithTemplate: vi.fn() })
     const saveBtn = screen.getByTestId('plan-ready-save-ticket-fab')
     const copyBtn = screen.getByTestId('plan-ready-copy-plan-fab')
+    const templateBtn = screen.getByTestId('plan-ready-template-menu')
     const handoffBtn = screen.getByTestId('handoff-stub')
 
+    expect(saveBtn.compareDocumentPosition(copyBtn) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(
-      saveBtn.compareDocumentPosition(copyBtn) & Node.DOCUMENT_POSITION_FOLLOWING
+      copyBtn.compareDocumentPosition(templateBtn) & Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy()
     expect(
-      copyBtn.compareDocumentPosition(handoffBtn) & Node.DOCUMENT_POSITION_FOLLOWING
+      templateBtn.compareDocumentPosition(handoffBtn) & Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy()
   })
 
@@ -225,5 +231,15 @@ describe('PlanReadyImplementFab — Copy plan button', () => {
     const { props } = renderFab()
     fireEvent.click(screen.getByTestId('plan-ready-copy-plan-fab'))
     expect(props.onCopyPlan).toHaveBeenCalledTimes(1)
+  })
+
+  test('selecting a template invokes the template implement prop', async () => {
+    const onImplementWithTemplate = vi.fn()
+    renderFab({ onImplementWithTemplate })
+
+    fireEvent.click(screen.getByTestId('plan-ready-template-menu'))
+    fireEvent.click(await screen.findByTestId('plan-ready-template-menu-item-tpl-1'))
+
+    expect(onImplementWithTemplate).toHaveBeenCalledWith('Implement, test, fix.')
   })
 })
