@@ -27,11 +27,7 @@ import { toast } from '@/lib/toast'
 import { ModeToggle } from './ModeToggle'
 import { SuperToggle } from './SuperToggle'
 import { ModelSelector } from './ModelSelector'
-import {
-  VirtualizedMessageList,
-  type VirtualizedMessageListHandle,
-  type VirtualizedMessageListViewportAnchor
-} from './VirtualizedMessageList'
+import { VirtualizedMessageList, type VirtualizedMessageListHandle } from './VirtualizedMessageList'
 import { ContextIndicator } from './ContextIndicator'
 import { AttachmentButton } from './AttachmentButton'
 import { AttachmentPreview } from './AttachmentPreview'
@@ -796,8 +792,6 @@ export function SessionView({ sessionId }: SessionViewProps): React.JSX.Element 
   const programmaticScrollResetRef = useRef<number | null>(null)
   const manualScrollIntentRef = useRef(false)
   const pointerDownInScrollerRef = useRef(false)
-  const pendingViewportAnchorRef = useRef<VirtualizedMessageListViewportAnchor | null>(null)
-  const [viewportRestoreNonce, setViewportRestoreNonce] = useState(0)
 
   // Streaming rAF ref (frame-synced flushing for text updates)
   const rafRef = useRef<number | null>(null)
@@ -995,28 +989,13 @@ export function SessionView({ sessionId }: SessionViewProps): React.JSX.Element 
     }
   }, [])
 
-  const captureLockedViewportAnchor = useCallback((): boolean => {
-    if (sessionRecord?.agent_sdk !== 'codex' || isAutoScrollEnabledRef.current) {
-      pendingViewportAnchorRef.current = null
-      return false
-    }
-
-    const anchor = virtualizedListRef.current?.captureViewportAnchor()
-    pendingViewportAnchorRef.current = anchor
-    return anchor !== null
-  }, [sessionRecord?.agent_sdk])
-
   const setMessages = useCallback(
     (
       nextMessages: OpenCodeMessage[] | ((currentMessages: OpenCodeMessage[]) => OpenCodeMessage[])
     ) => {
-      const shouldRestoreViewport = captureLockedViewportAnchor()
       setMessagesState(nextMessages)
-      if (shouldRestoreViewport) {
-        setViewportRestoreNonce((current) => current + 1)
-      }
     },
-    [captureLockedViewportAnchor]
+    []
   )
 
   // Auto-scroll to bottom when new messages arrive or streaming updates
@@ -1104,30 +1083,9 @@ export function SessionView({ sessionId }: SessionViewProps): React.JSX.Element 
     }
   }, [messages, streamingContent, streamingParts, scrollToBottom])
 
-  useLayoutEffect(() => {
-    const anchor = pendingViewportAnchorRef.current
-    if (!anchor) return
-
-    if (isAutoScrollEnabledRef.current) {
-      pendingViewportAnchorRef.current = null
-      return
-    }
-
-    markProgrammaticScroll()
-    const restored = virtualizedListRef.current?.restoreViewportAnchor(anchor)
-    if (!restored) return
-
-    const el = scrollContainerRef.current
-    if (el) {
-      lastScrollTopRef.current = el.scrollTop
-    }
-    pendingViewportAnchorRef.current = null
-  }, [markProgrammaticScroll, messages, viewportRestoreNonce])
-
   // Reset auto-scroll state on session switch
   useEffect(() => {
     resetAutoScrollState()
-    pendingViewportAnchorRef.current = null
   }, [resetAutoScrollState, sessionId])
 
   // Instant scroll to bottom when session view becomes connected with messages.
@@ -5775,6 +5733,7 @@ export function SessionView({ sessionId }: SessionViewProps): React.JSX.Element 
           onPointerDown={handleScrollPointerDown}
           onPointerUp={handleScrollPointerUp}
           onPointerCancel={handleScrollPointerCancel}
+          style={{ overflowAnchor: 'none' }}
           data-testid="message-list"
         >
           {/* Read-only banner for orphaned sessions */}
@@ -5837,6 +5796,7 @@ export function SessionView({ sessionId }: SessionViewProps): React.JSX.Element 
               completionEntry={completionEntry}
               scrollElement={scrollElement}
               lockViewport={sessionAgentSdk === 'codex' && showScrollFab}
+              disableVirtualization={sessionAgentSdk === 'codex'}
             />
           )}
         </div>
