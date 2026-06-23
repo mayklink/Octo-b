@@ -91,6 +91,7 @@ describe('VirtualizedMessageList scroll anchoring', () => {
   test('captures and restores the viewport anchor using stable item keys', () => {
     const scrollElement = createScrollElement()
     scrollElement.scrollTop = 150
+    scrollElement.scrollHeight = 1000
 
     const ref = createRef<VirtualizedMessageListHandle>()
 
@@ -138,7 +139,8 @@ describe('VirtualizedMessageList scroll anchoring', () => {
       itemKey: 'message:assistant-1',
       offsetWithinItem: 30,
       fallbackScrollTop: 150,
-      fallbackScrollHeight: 600
+      fallbackScrollHeight: 1000,
+      distanceFromBottom: 610
     })
 
     mockVirtualizer.measurementsCache = [
@@ -150,6 +152,227 @@ describe('VirtualizedMessageList scroll anchoring', () => {
 
     expect(ref.current?.restoreViewportAnchor(anchor!)).toBe(true)
     expect(scrollElement.scrollTop).toBe(210)
+  })
+
+  test('preserves bottom distance for near-bottom manual scroll during streaming', () => {
+    const scrollElement = createScrollElement()
+    scrollElement.scrollTop = 300
+    scrollElement.scrollHeight = 600
+
+    const ref = createRef<VirtualizedMessageListHandle>()
+
+    render(
+      <VirtualizedMessageList
+        ref={ref}
+        messages={[
+          {
+            id: 'user-1',
+            role: 'user',
+            content: 'Question',
+            timestamp: '2026-03-14T10:00:00.000Z'
+          },
+          {
+            id: 'assistant-1',
+            role: 'assistant',
+            content: 'Answer',
+            timestamp: '2026-03-14T10:00:01.000Z'
+          }
+        ]}
+        streamingMessage={null}
+        isStreaming={true}
+        isSending={false}
+        isCompacting={false}
+        cwd={null}
+        onForkAssistantMessage={() => {}}
+        forkingMessageId={null}
+        revertMessageID={null}
+        revertedUserCount={0}
+        onRedoRevert={() => {}}
+        sessionErrorMessage={null}
+        sessionErrorStderr={null}
+        sessionRetry={null}
+        retrySecondsRemaining={null}
+        hasVisibleWritingCursor={false}
+        queuedMessages={[]}
+        completionEntry={null}
+        scrollElement={scrollElement}
+        lockViewport={true}
+      />
+    )
+
+    const anchor = ref.current?.captureViewportAnchor()
+    expect(anchor?.distanceFromBottom).toBe(60)
+
+    scrollElement.scrollTop = 0
+    scrollElement.scrollHeight = 900
+
+    expect(ref.current?.restoreViewportAnchor(anchor!)).toBe(true)
+    expect(scrollElement.scrollTop).toBe(600)
+  })
+
+  test('scrolls to the real container bottom after virtualizer scroll-to-end', () => {
+    const scrollElement = createScrollElement()
+    scrollElement.scrollTop = 120
+    scrollElement.scrollHeight = 920
+
+    const ref = createRef<VirtualizedMessageListHandle>()
+
+    render(
+      <VirtualizedMessageList
+        ref={ref}
+        messages={[
+          {
+            id: 'user-1',
+            role: 'user',
+            content: 'Question',
+            timestamp: '2026-03-14T10:00:00.000Z'
+          },
+          {
+            id: 'assistant-1',
+            role: 'assistant',
+            content: 'Answer',
+            timestamp: '2026-03-14T10:00:01.000Z'
+          }
+        ]}
+        streamingMessage={null}
+        isStreaming={true}
+        isSending={false}
+        isCompacting={false}
+        cwd={null}
+        onForkAssistantMessage={() => {}}
+        forkingMessageId={null}
+        revertMessageID={null}
+        revertedUserCount={0}
+        onRedoRevert={() => {}}
+        sessionErrorMessage={null}
+        sessionErrorStderr={null}
+        sessionRetry={null}
+        retrySecondsRemaining={null}
+        hasVisibleWritingCursor={false}
+        queuedMessages={[]}
+        completionEntry={null}
+        scrollElement={scrollElement}
+        lockViewport={true}
+      />
+    )
+
+    ref.current?.scrollToEnd('smooth')
+
+    expect(mockVirtualizer.scrollToIndex).toHaveBeenCalledWith(1, {
+      align: 'end',
+      behavior: 'smooth'
+    })
+    expect(scrollElement.scrollTop).toBe(680)
+  })
+
+  test('scrolls to the real container bottom without invoking the virtualizer when virtualization is disabled', () => {
+    const scrollElement = createScrollElement()
+    scrollElement.scrollTop = 120
+    scrollElement.scrollHeight = 920
+
+    const ref = createRef<VirtualizedMessageListHandle>()
+
+    render(
+      <VirtualizedMessageList
+        ref={ref}
+        messages={[
+          {
+            id: 'user-1',
+            role: 'user',
+            content: 'Question',
+            timestamp: '2026-03-14T10:00:00.000Z'
+          },
+          {
+            id: 'assistant-1',
+            role: 'assistant',
+            content: 'Answer',
+            timestamp: '2026-03-14T10:00:01.000Z'
+          }
+        ]}
+        streamingMessage={null}
+        isStreaming={true}
+        isSending={false}
+        isCompacting={false}
+        cwd={null}
+        onForkAssistantMessage={() => {}}
+        forkingMessageId={null}
+        revertMessageID={null}
+        revertedUserCount={0}
+        onRedoRevert={() => {}}
+        sessionErrorMessage={null}
+        sessionErrorStderr={null}
+        sessionRetry={null}
+        retrySecondsRemaining={null}
+        hasVisibleWritingCursor={false}
+        queuedMessages={[]}
+        completionEntry={null}
+        scrollElement={scrollElement}
+        lockViewport={true}
+        disableVirtualization
+      />
+    )
+
+    ref.current?.scrollToEnd('smooth')
+
+    expect(mockVirtualizer.scrollToIndex).not.toHaveBeenCalled()
+    expect(scrollElement.scrollTop).toBe(680)
+  })
+
+  test('anchors to the nearest measured item instead of the top when offset is below measured rows', () => {
+    const scrollElement = createScrollElement()
+    scrollElement.scrollTop = 520
+
+    mockVirtualizer.getVirtualItemForOffset.mockReturnValue(undefined)
+    mockVirtualizer.measurementsCache = [
+      { key: 'message:user-1', index: 0, start: 0, end: 120, size: 120, lane: 0 },
+      { key: 'message:assistant-1', index: 1, start: 360, end: 500, size: 140, lane: 0 }
+    ]
+
+    const ref = createRef<VirtualizedMessageListHandle>()
+
+    render(
+      <VirtualizedMessageList
+        ref={ref}
+        messages={[
+          {
+            id: 'user-1',
+            role: 'user',
+            content: 'Question',
+            timestamp: '2026-03-14T10:00:00.000Z'
+          },
+          {
+            id: 'assistant-1',
+            role: 'assistant',
+            content: 'Answer',
+            timestamp: '2026-03-14T10:00:01.000Z'
+          }
+        ]}
+        streamingMessage={null}
+        isStreaming={true}
+        isSending={false}
+        isCompacting={false}
+        cwd={null}
+        onForkAssistantMessage={() => {}}
+        forkingMessageId={null}
+        revertMessageID={null}
+        revertedUserCount={0}
+        onRedoRevert={() => {}}
+        sessionErrorMessage={null}
+        sessionErrorStderr={null}
+        sessionRetry={null}
+        retrySecondsRemaining={null}
+        hasVisibleWritingCursor={false}
+        queuedMessages={[]}
+        completionEntry={null}
+        scrollElement={scrollElement}
+        lockViewport={true}
+      />
+    )
+
+    expect(ref.current?.captureViewportAnchor()).toMatchObject({
+      itemKey: 'message:assistant-1',
+      offsetWithinItem: 160
+    })
   })
 
   test('disables virtualizer resize corrections while the viewport is locked', () => {

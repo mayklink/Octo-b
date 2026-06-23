@@ -53,6 +53,7 @@ export interface VirtualizedMessageListProps {
   completionEntry: { word?: string; durationMs?: number } | null
   scrollElement: HTMLDivElement | null
   lockViewport: boolean
+  disableVirtualization?: boolean
 }
 
 export interface VirtualizedMessageListHandle {
@@ -66,10 +67,31 @@ export interface VirtualizedMessageListViewportAnchor {
   offsetWithinItem: number
   fallbackScrollTop: number
   fallbackScrollHeight: number
+  distanceFromBottom: number
 }
 
 export function getVirtualizedMessageListItemKey(item: VirtualItem): string {
   return item.key
+}
+
+function getNearestMeasuredItemForOffset<T extends { start: number; end: number }>(
+  measurements: T[],
+  offset: number
+): T | undefined {
+  const containingItem = measurements.find((item) => item.start <= offset && item.end > offset)
+  if (containingItem) return containingItem
+
+  for (let i = measurements.length - 1; i >= 0; i--) {
+    if (measurements[i].start <= offset) {
+      return measurements[i]
+    }
+  }
+
+  return measurements[0]
+}
+
+function shouldRestoreFromBottomDistance(anchor: VirtualizedMessageListViewportAnchor): boolean {
+  return anchor.distanceFromBottom >= 0 && anchor.distanceFromBottom < 480
 }
 
 function VirtualizedMessageRow({
@@ -157,6 +179,7 @@ function VirtualizedMessageRow({
         top: 0,
         left: 0,
         width: '100%',
+        overflowAnchor: 'none',
         transform: `translateY(${start}px)`
       }}
     >
@@ -195,7 +218,8 @@ export const VirtualizedMessageList = memo(
         steeringMessageId,
         completionEntry,
         scrollElement,
-        lockViewport
+        lockViewport,
+        disableVirtualization = false
       }: VirtualizedMessageListProps,
       ref
     ): React.JSX.Element {
@@ -268,19 +292,63 @@ export const VirtualizedMessageList = memo(
         estimateSize: () => 150,
         overscan: 5
       })
-      virtualizer.shouldAdjustScrollPositionOnItemSizeChange = lockViewport
-        ? () => false
-        : undefined
+      virtualizer.shouldAdjustScrollPositionOnItemSizeChange =
+        lockViewport || disableVirtualization ? () => false : undefined
+
+      const scrollToEndCorrectionFramesRef = useRef<number[]>([])
+
+      const cancelScrollToEndCorrections = useCallback(() => {
+        for (const frame of scrollToEndCorrectionFramesRef.current) {
+          window.cancelAnimationFrame(frame)
+        }
+        scrollToEndCorrectionFramesRef.current = []
+      }, [])
+
+      const scheduleScrollToEndCorrection = useCallback(() => {
+        if (!scrollElement || typeof window.requestAnimationFrame !== 'function') return
+
+        cancelScrollToEndCorrections()
+
+        const correctToEnd = () => {
+          const maxScrollTop = Math.max(0, scrollElement.scrollHeight - scrollElement.clientHeight)
+          if (Math.abs(scrollElement.scrollTop - maxScrollTop) >= 1) {
+            scrollElement.scrollTop = maxScrollTop
+          }
+        }
+
+        const firstFrame = window.requestAnimationFrame(() => {
+          correctToEnd()
+
+          const secondFrame = window.requestAnimationFrame(() => {
+            correctToEnd()
+            scrollToEndCorrectionFramesRef.current = []
+          })
+          scrollToEndCorrectionFramesRef.current = [secondFrame]
+        })
+        scrollToEndCorrectionFramesRef.current = [firstFrame]
+      }, [cancelScrollToEndCorrections, scrollElement])
+
+      useEffect(() => cancelScrollToEndCorrections, [cancelScrollToEndCorrections])
 
       useImperativeHandle(
         ref,
         () => ({
           scrollToEnd: (behavior?: ScrollBehavior) => {
             if (items.length > 0) {
-              virtualizer.scrollToIndex(items.length - 1, {
-                align: 'end',
-                behavior: behavior ?? 'instant'
-              })
+              cancelScrollToEndCorrections()
+              if (disableVirtualization && scrollElement) {
+                const top = Math.max(0, scrollElement.scrollHeight - scrollElement.clientHeight)
+                scrollElement.scrollTo?.({ top, behavior: behavior ?? 'instant' })
+                if (Math.abs(scrollElement.scrollTop - top) >= 1) {
+                  scrollElement.scrollTop = top
+                }
+              } else {
+                virtualizer.scrollToIndex(items.length - 1, {
+                  align: 'end',
+                  behavior: behavior ?? 'instant'
+                })
+              }
+              scheduleScrollToEndCorrection()
             }
           },
           captureViewportAnchor: () => {
@@ -288,7 +356,8 @@ export const VirtualizedMessageList = memo(
 
             const scrollTop = scrollElement.scrollTop
             const anchorItem =
-              virtualizer.getVirtualItemForOffset(scrollTop) ?? virtualizer.measurementsCache[0]
+              virtualizer.getVirtualItemForOffset(scrollTop) ??
+              getNearestMeasuredItemForOffset(virtualizer.measurementsCache, scrollTop)
 
             if (!anchorItem) return null
 
@@ -296,7 +365,11 @@ export const VirtualizedMessageList = memo(
               itemKey: String(anchorItem.key),
               offsetWithinItem: Math.max(0, scrollTop - anchorItem.start),
               fallbackScrollTop: scrollTop,
-              fallbackScrollHeight: scrollElement.scrollHeight
+              fallbackScrollHeight: scrollElement.scrollHeight,
+              distanceFromBottom: Math.max(
+                0,
+                scrollElement.scrollHeight - scrollTop - scrollElement.clientHeight
+              )
             }
           },
           restoreViewportAnchor: (anchor: VirtualizedMessageListViewportAnchor) => {
@@ -307,9 +380,13 @@ export const VirtualizedMessageList = memo(
             )
             const fallbackScrollTop =
               anchor.fallbackScrollTop + (scrollElement.scrollHeight - anchor.fallbackScrollHeight)
-            const nextScrollTop = anchorItem
-              ? anchorItem.start + anchor.offsetWithinItem
-              : fallbackScrollTop
+            const bottomDistanceScrollTop =
+              scrollElement.scrollHeight - scrollElement.clientHeight - anchor.distanceFromBottom
+            const nextScrollTop = shouldRestoreFromBottomDistance(anchor)
+              ? bottomDistanceScrollTop
+              : anchorItem
+                ? anchorItem.start + anchor.offsetWithinItem
+                : fallbackScrollTop
             const maxScrollTop = Math.max(
               0,
               scrollElement.scrollHeight - scrollElement.clientHeight
@@ -324,7 +401,14 @@ export const VirtualizedMessageList = memo(
             return true
           }
         }),
-        [items, scrollElement, virtualizer]
+        [
+          cancelScrollToEndCorrections,
+          disableVirtualization,
+          items,
+          scheduleScrollToEndCorrection,
+          scrollElement,
+          virtualizer
+        ]
       )
 
       // Render a single virtual item
@@ -471,13 +555,26 @@ export const VirtualizedMessageList = memo(
         }
       }
 
+      if (disableVirtualization) {
+        return (
+          <div className="py-4" style={{ overflowAnchor: 'none' }}>
+            {items.map((item) => (
+              <div key={item.key} style={{ overflowAnchor: 'none' }}>
+                {renderItem(item)}
+              </div>
+            ))}
+          </div>
+        )
+      }
+
       return (
-        <div className="py-4">
+        <div className="py-4" style={{ overflowAnchor: 'none' }}>
           <div
             style={{
               height: virtualizer.getTotalSize(),
               width: '100%',
-              position: 'relative'
+              position: 'relative',
+              overflowAnchor: 'none'
             }}
           >
             {virtualizer.getVirtualItems().map((virtualRow) => {
