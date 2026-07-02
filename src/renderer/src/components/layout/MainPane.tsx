@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, lazy, Suspense } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, lazy, Suspense } from 'react'
 import { Loader2 } from 'lucide-react'
 import { SessionTabs, SessionView } from '@/components/sessions'
 import { SessionTerminalView } from '@/components/sessions/SessionTerminalView'
@@ -20,6 +20,9 @@ import { BoardAssistantView } from '@/components/kanban/BoardAssistantView'
 import { PRNotificationStack } from '@/components/pr/PRNotificationStack'
 import { MainPaneTerminalPanel } from './MainPaneTerminalPanel'
 import { SettingsView } from '@/components/settings'
+
+const SESSION_TERMINAL_VIEW_IDLE_UNMOUNT_MS = 60_000
+const MAX_MOUNTED_SESSION_TERMINAL_VIEWS = 2
 
 const MonacoDiffView = lazy(() => import('@/components/diff/MonacoDiffView'))
 const WorktreeContextEditor = lazy(() =>
@@ -45,6 +48,7 @@ export function MainPane({ children }: MainPaneProps): React.JSX.Element {
   const activePinnedSessionId = useSessionStore((state) => state.activePinnedSessionId)
   const activeBoardAssistantProjectId = useSessionStore((state) => state.activeBoardAssistantProjectId)
   const isBoardViewActive = useKanbanStore((state) => state.isBoardViewActive)
+  const isUserBoardActive = useKanbanStore((state) => state.isUserBoardActive)
   const isPinnedBoardActive = useKanbanStore((state) => state.isPinnedBoardActive)
   const pinnedStoreLoaded = usePinnedStore((state) => state.loaded)
   const boardMode = useSettingsStore((s) => s.boardMode)
@@ -95,30 +99,15 @@ export function MainPane({ children }: MainPaneProps): React.JSX.Element {
     return terminals
   }, [selectedWorktreeId, selectedConnectionId, sessionsByWorktree, sessionsByConnection])
 
-  // Keep terminal views mounted once discovered so transient session-map churn
-  // does not reset terminal UI state.
-  const [mountedTerminalSessionIds, setMountedTerminalSessionIds] = useState<string[]>(() =>
-    Array.from(new Set(terminalSessions))
-  )
-
-  useEffect(() => {
-    setMountedTerminalSessionIds((current) => {
-      const merged = [...current]
-      let changed = false
-
-      for (const sessionId of terminalSessions) {
-        if (!merged.includes(sessionId)) {
-          merged.push(sessionId)
-          changed = true
-        }
-      }
-
-      return changed ? merged : current
-    })
-  }, [terminalSessions])
+  // Session terminals are expensive because they mount xterm/Ghostty surfaces.
+  // Mount them lazily, keep the active one plus one recent hidden view, then
+  // unload hidden views after a short idle window. The PTY itself remains alive
+  // until the session tab is closed, so switching back still reconnects.
+  const [mountedTerminalSessionIds, setMountedTerminalSessionIds] = useState<string[]>([])
+  const terminalIdlePruneTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null)
 
   // Prune terminals that were explicitly closed (tab close).
-  // This is the ONLY path that removes from mountedTerminalSessionIds.
+  // Closed terminal tabs must be removed immediately, regardless of the idle cache.
   useEffect(() => {
     if (closedTerminalSessionIds.size === 0) return
 
@@ -164,6 +153,53 @@ export function MainPane({ children }: MainPaneProps): React.JSX.Element {
     ghosttyOverlaySuppressed
   ])
 
+  useEffect(() => {
+    const liveTerminalIds = new Set(terminalSessions)
+
+    setMountedTerminalSessionIds((current) => {
+      const pruned = current.filter((id) => liveTerminalIds.has(id) || id === visibleTerminalId)
+      if (!visibleTerminalId) {
+        return pruned.length === current.length ? current : pruned
+      }
+
+      const next = [
+        visibleTerminalId,
+        ...pruned.filter((id) => id !== visibleTerminalId)
+      ].slice(0, MAX_MOUNTED_SESSION_TERMINAL_VIEWS)
+
+      return next.length === current.length && next.every((id, index) => id === current[index])
+        ? current
+        : next
+    })
+  }, [terminalSessions, visibleTerminalId])
+
+  useEffect(() => {
+    if (terminalIdlePruneTimerRef.current) {
+      window.clearTimeout(terminalIdlePruneTimerRef.current)
+      terminalIdlePruneTimerRef.current = null
+    }
+
+    terminalIdlePruneTimerRef.current = window.setTimeout(() => {
+      setMountedTerminalSessionIds((current) =>
+        visibleTerminalId ? current.filter((id) => id === visibleTerminalId) : []
+      )
+    }, SESSION_TERMINAL_VIEW_IDLE_UNMOUNT_MS)
+
+    return () => {
+      if (terminalIdlePruneTimerRef.current) {
+        window.clearTimeout(terminalIdlePruneTimerRef.current)
+        terminalIdlePruneTimerRef.current = null
+      }
+    }
+  }, [visibleTerminalId])
+
+  const renderedTerminalSessionIds = useMemo(() => {
+    if (!visibleTerminalId || mountedTerminalSessionIds.includes(visibleTerminalId)) {
+      return mountedTerminalSessionIds
+    }
+    return [visibleTerminalId, ...mountedTerminalSessionIds].slice(0, MAX_MOUNTED_SESSION_TERMINAL_VIEWS)
+  }, [mountedTerminalSessionIds, visibleTerminalId])
+
   const handleCloseDiff = useCallback(() => {
     const filePath = useFileViewerStore.getState().activeFilePath
     if (filePath?.startsWith('diff:')) {
@@ -186,6 +222,10 @@ export function MainPane({ children }: MainPaneProps): React.JSX.Element {
     // Board assistant tab is active — render BoardAssistantView in main pane
     if (activeBoardAssistantProjectId && !activeFilePath && !activeDiff && !contextEditorWorktreeId) {
       return <BoardAssistantView key={activeBoardAssistantProjectId} projectId={activeBoardAssistantProjectId} />
+    }
+
+    if (isUserBoardActive && !activeFilePath && !activeDiff && !contextEditorWorktreeId) {
+      return <KanbanBoard isAllProjectsMode={true} />
     }
 
     // Sticky-tab board mode: render board when BOARD_TAB_ID is the active session
@@ -374,7 +414,7 @@ export function MainPane({ children }: MainPaneProps): React.JSX.Element {
       {!settingsOpen && (selectedWorktreeId || selectedConnectionId) && <SessionTabs />}
       <div className="flex-1 flex flex-col min-h-0">
         {renderContent()}
-        {mountedTerminalSessionIds.map((sessionId) => {
+        {renderedTerminalSessionIds.map((sessionId) => {
           const isActive = !settingsOpen && visibleTerminalId === sessionId
           return (
             <div key={sessionId} className={isActive ? 'flex-1 flex flex-col min-h-0' : 'hidden'}>

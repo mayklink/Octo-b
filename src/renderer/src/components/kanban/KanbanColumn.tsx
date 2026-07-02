@@ -48,9 +48,10 @@ interface KanbanColumnProps {
   projectId: string
   connectionId?: string
   isPinnedMode?: boolean
+  isAllProjectsMode?: boolean
 }
 
-export function KanbanColumn({ column, tickets, archivedTickets, projectId, connectionId, isPinnedMode }: KanbanColumnProps) {
+export function KanbanColumn({ column, tickets, archivedTickets, projectId, connectionId, isPinnedMode, isAllProjectsMode }: KanbanColumnProps) {
   const { t } = useTranslation()
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
@@ -82,7 +83,7 @@ export function KanbanColumn({ column, tickets, archivedTickets, projectId, conn
   const isDoneColumn = column === 'done'
   const isTodoColumn = column === 'todo'
   const isInProgressColumn = column === 'in_progress'
-  const isMultiProjectMode = !!connectionId || !!isPinnedMode
+  const isMultiProjectMode = !!connectionId || !!isPinnedMode || !!isAllProjectsMode
   const isBulkArchiveColumn = isTodoColumn || isDoneColumn
   const selectedCount = selectedTicketIds.size
 
@@ -817,6 +818,7 @@ export function KanbanColumn({ column, tickets, archivedTickets, projectId, conn
                       onSelectedChange={handleSelectTicket}
                       connectionId={connectionId}
                       isPinnedMode={isPinnedMode}
+                      isAllProjectsMode={isAllProjectsMode}
                     />
                   </div>
                 </motion.div>
@@ -833,7 +835,7 @@ export function KanbanColumn({ column, tickets, archivedTickets, projectId, conn
                   </div>
                   {archivedTickets.map((ticket) => (
                     <div key={ticket.id}>
-                      <KanbanTicketCard ticket={ticket} index={-1} isArchived connectionId={connectionId} isPinnedMode={isPinnedMode} />
+                      <KanbanTicketCard ticket={ticket} index={-1} isArchived connectionId={connectionId} isPinnedMode={isPinnedMode} isAllProjectsMode={isAllProjectsMode} />
                     </div>
                   ))}
                 </>
@@ -863,6 +865,7 @@ export function KanbanColumn({ column, tickets, archivedTickets, projectId, conn
           projectId={projectId}
           connectionId={connectionId}
           isPinnedMode={isPinnedMode}
+          isAllProjectsMode={isAllProjectsMode}
         />
       )}
 

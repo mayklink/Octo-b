@@ -30,10 +30,11 @@ interface TicketCreateModalProps {
   projectId: string
   connectionId?: string
   isPinnedMode?: boolean
+  isAllProjectsMode?: boolean
 }
 
 // ── Component ───────────────────────────────────────────────────────
-export function TicketCreateModal({ open, onOpenChange, projectId, connectionId, isPinnedMode }: TicketCreateModalProps) {
+export function TicketCreateModal({ open, onOpenChange, projectId, connectionId, isPinnedMode, isAllProjectsMode }: TicketCreateModalProps) {
   const { t } = useTranslation()
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
@@ -76,8 +77,19 @@ export function TicketCreateModal({ open, onOpenChange, projectId, connectionId,
       .sort((a, b) => a.name.localeCompare(b.name))
   }, [isPinnedMode, pinnedProjectIds, allProjects])
 
-  const isMultiProjectMode = isConnectionMode || !!isPinnedMode
-  const availableProjects = isConnectionMode ? connectionProjects : pinnedProjects
+  const allAvailableProjects = useMemo(() => {
+    if (!isAllProjectsMode) return []
+    return allProjects
+      .map((project) => ({ id: project.id, name: project.name }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+  }, [allProjects, isAllProjectsMode])
+
+  const isMultiProjectMode = isConnectionMode || !!isPinnedMode || !!isAllProjectsMode
+  const availableProjects = isConnectionMode
+    ? connectionProjects
+    : isAllProjectsMode
+      ? allAvailableProjects
+      : pinnedProjects
   const initialSelectedProjectId = availableProjects[0]?.id ?? ''
   const isDirty = title.trim().length > 0
     || description.trim().length > 0

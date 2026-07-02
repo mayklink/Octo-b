@@ -15,6 +15,8 @@ export type BoardChatStatus =
   | 'awaiting_confirmation'
   | 'error'
 
+export type BoardChatMode = 'developer' | 'user'
+
 export type BoardChatScope =
   | {
       kind: 'project'
@@ -27,6 +29,10 @@ export type BoardChatScope =
       connectionId: string
       connectionName: string
       connectionPath: string
+      availableProjects: Array<{ id: string; name: string }>
+    }
+  | {
+      kind: 'all-projects'
       availableProjects: Array<{ id: string; name: string }>
     }
   | {
@@ -55,6 +61,7 @@ export interface TicketDraft {
 interface ResetBoardChatOptions {
   preserveOpen?: boolean
   scope?: BoardChatScope | null
+  assistantMode?: BoardChatMode
   selectedTargetProjectId?: string | null
   selectedAgentSdkOverride?: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | null
   selectedModelOverride?: SelectedModel | null
@@ -62,6 +69,7 @@ interface ResetBoardChatOptions {
 
 export interface BoardChatSnapshot {
   scope: BoardChatScope | null
+  assistantMode: BoardChatMode
   messages: BoardChatMessage[]
   drafts: TicketDraft[]
   createdDraftIds: string[]
@@ -98,6 +106,8 @@ interface BoardChatState extends BoardChatSnapshot {
   createSelected: () => Promise<void>
   toggleDraftSelected: (draftId: string) => void
   markDraftsCreated: (draftIds: string[]) => void
+  setAssistantMode: (mode: BoardChatMode) => void
+  setProjectAssistantMode: (projectId: string, mode: BoardChatMode) => void
   setSelectedTargetProjectId: (projectId: string | null) => Promise<void>
   setSelectedAgentSdkOverride: (sdk: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | null) => void
   setSelectedModelOverride: (model: SelectedModel | null) => void
@@ -146,6 +156,7 @@ const BOARD_RULES_TAG_RE = /<board-assistant-rules>[\s\S]*?<\/board-assistant-ru
 const BOARD_CONTEXT_TAG_RE = /<board-assistant-context>[\s\S]*?<\/board-assistant-context>/gi
 const BOARD_DRAFT_BLOCK_RE = /```board-ticket-drafts[\s\S]*?```/gi
 const BOARD_DRAFT_BLOCK_CAPTURE_RE = /```board-ticket-drafts\s*([\s\S]*?)```/i
+const MAX_BOARD_CHAT_MESSAGES_IN_MEMORY = 120
 
 export function stripBoardAssistantScaffolding(content: string): string {
   const withoutTags = content
@@ -214,7 +225,7 @@ function makeLocalMessage(role: OpenCodeMessage['role'], content: string): Board
 function buildDefaultTargetProjectId(scope: BoardChatScope | null): string | null {
   if (!scope) return null
   if (scope.kind === 'project') return scope.projectId
-  if (scope.kind === 'connection') return scope.availableProjects[0]?.id ?? null
+  if (scope.kind === 'connection' || scope.kind === 'all-projects') return scope.availableProjects[0]?.id ?? null
   return null
 }
 
@@ -222,6 +233,7 @@ function createInitialSnapshot(options?: ResetBoardChatOptions): BoardChatSnapsh
   const scope = options?.scope ?? null
   return {
     scope,
+    assistantMode: options?.assistantMode ?? 'developer',
     messages: [],
     drafts: [],
     createdDraftIds: [],
@@ -239,16 +251,28 @@ function createInitialSnapshot(options?: ResetBoardChatOptions): BoardChatSnapsh
   }
 }
 
+function compactBoardChatMessages(messages: BoardChatMessage[]): BoardChatMessage[] {
+  if (messages.length <= MAX_BOARD_CHAT_MESSAGES_IN_MEMORY) return messages
+  return messages.slice(-MAX_BOARD_CHAT_MESSAGES_IN_MEMORY)
+}
+
+function compactBoardChatSnapshot(snapshot: BoardChatSnapshot): BoardChatSnapshot {
+  const messages = compactBoardChatMessages(snapshot.messages)
+  return messages === snapshot.messages ? snapshot : { ...snapshot, messages }
+}
+
 function getScopeKey(scope: BoardChatScope | null): string {
   if (!scope) return 'none'
   if (scope.kind === 'project') return `project:${scope.projectId}`
   if (scope.kind === 'connection') return `connection:${scope.connectionId}`
+  if (scope.kind === 'all-projects') return 'all-projects'
   return 'pinned'
 }
 
 function getSnapshotFromState(state: BoardChatState): BoardChatSnapshot {
   return {
     scope: state.scope,
+    assistantMode: state.assistantMode,
     messages: state.messages,
     drafts: state.drafts,
     createdDraftIds: state.createdDraftIds,
@@ -271,17 +295,18 @@ function replaceActiveSnapshot(
   activeScopeKey = getScopeKey(snapshot.scope),
   options?: { dropExistingSnapshot?: boolean }
 ): Partial<BoardChatState> {
+  const compactedSnapshot = compactBoardChatSnapshot(snapshot)
   const nextSnapshots = { ...state.snapshots }
   if (activeScopeKey !== 'none') {
     if (options?.dropExistingSnapshot) {
       delete nextSnapshots[activeScopeKey]
     } else {
-      nextSnapshots[activeScopeKey] = snapshot
+      nextSnapshots[activeScopeKey] = compactedSnapshot
     }
   }
 
   return {
-    ...snapshot,
+    ...compactedSnapshot,
     activeScopeKey,
     snapshots: nextSnapshots
   }
@@ -296,14 +321,16 @@ function patchActiveSnapshot(
     ...getSnapshotFromState(state),
     ...patch
   }
+  const compactedSnapshot = compactBoardChatSnapshot(nextSnapshot)
 
   const nextSnapshots = { ...state.snapshots }
   if (activeScopeKey !== 'none') {
-    nextSnapshots[activeScopeKey] = nextSnapshot
+    nextSnapshots[activeScopeKey] = compactedSnapshot
   }
 
   return {
     ...patch,
+    messages: compactedSnapshot.messages,
     activeScopeKey,
     snapshots: nextSnapshots
   }
@@ -326,6 +353,8 @@ function createBaseState(): Omit<
   | 'sendMessage'
   | 'createSelected'
   | 'toggleDraftSelected'
+  | 'setAssistantMode'
+  | 'setProjectAssistantMode'
   | 'setSelectedTargetProjectId'
   | 'openDrawer'
   | 'minimizeDrawer'
@@ -369,6 +398,9 @@ function getProjectName(scope: BoardChatScope | null, projectId: string): string
   if (!scope) return 'Unknown project'
   if (scope.kind === 'project') return scope.projectName
   if (scope.kind === 'connection') {
+    return scope.availableProjects.find((project) => project.id === projectId)?.name ?? 'Unknown project'
+  }
+  if (scope.kind === 'all-projects') {
     return scope.availableProjects.find((project) => project.id === projectId)?.name ?? 'Unknown project'
   }
   return 'Pinned projects'
@@ -620,6 +652,7 @@ export const useBoardChatStore = create<BoardChatState>((set, get) => ({
       scope: state.scope,
       selectedTargetProjectId:
         state.scope?.kind === 'project' ? state.scope.projectId : state.selectedTargetProjectId,
+      assistantMode: state.assistantMode,
       selectedAgentSdkOverride: state.selectedAgentSdkOverride,
       selectedModelOverride: state.selectedModelOverride
     })
@@ -641,6 +674,7 @@ export const useBoardChatStore = create<BoardChatState>((set, get) => ({
           scope: state.scope,
           selectedTargetProjectId:
             state.scope?.kind === 'project' ? state.scope.projectId : state.selectedTargetProjectId,
+          assistantMode: state.assistantMode,
           selectedAgentSdkOverride: state.selectedAgentSdkOverride,
           selectedModelOverride: state.selectedModelOverride
         }),
@@ -907,6 +941,41 @@ export const useBoardChatStore = create<BoardChatState>((set, get) => ({
       })
     ),
 
+  setAssistantMode: (assistantMode) =>
+    set((state) => patchActiveSnapshot(state, { assistantMode })),
+
+  setProjectAssistantMode: (projectId, assistantMode) =>
+    set((state) => {
+      const key = `project:${projectId}`
+      const currentSnapshot =
+        state.activeScopeKey === key ? getSnapshotFromState(state) : state.snapshots[key]
+      const nextSnapshot = currentSnapshot
+        ? {
+            ...currentSnapshot,
+            assistantMode,
+            selectedTargetProjectId: currentSnapshot.selectedTargetProjectId ?? projectId
+          }
+        : createInitialSnapshot({
+            assistantMode,
+            selectedTargetProjectId: projectId
+          })
+
+      const nextSnapshots = {
+        ...state.snapshots,
+        [key]: nextSnapshot
+      }
+
+      if (state.activeScopeKey === key) {
+        return {
+          assistantMode,
+          selectedTargetProjectId: state.selectedTargetProjectId ?? projectId,
+          snapshots: nextSnapshots
+        }
+      }
+
+      return { snapshots: nextSnapshots }
+    }),
+
   setSelectedTargetProjectId: async (projectId) => {
     const state = get()
     if (state.selectedTargetProjectId === projectId) return
@@ -916,6 +985,7 @@ export const useBoardChatStore = create<BoardChatState>((set, get) => ({
         current,
         createInitialSnapshot({
           scope: state.scope,
+          assistantMode: state.assistantMode,
           selectedTargetProjectId: projectId,
           selectedAgentSdkOverride: state.selectedAgentSdkOverride,
           selectedModelOverride: state.selectedModelOverride
