@@ -22,7 +22,8 @@ import {
   Copy,
   Hammer,
   Map,
-  Check
+  Check,
+  UserRound
 } from 'lucide-react'
 import { KanbanIcon } from '@/components/kanban/KanbanIcon'
 import { Button } from '@/components/ui/button'
@@ -56,7 +57,7 @@ import {
 import { useProjectStore } from '@/stores/useProjectStore'
 import { useWorktreeStore } from '@/stores/useWorktreeStore'
 import { useConnectionStore } from '@/stores/useConnectionStore'
-import { useSessionStore } from '@/stores/useSessionStore'
+import { useSessionStore, BOARD_TAB_ID } from '@/stores/useSessionStore'
 import { useGitStore } from '@/stores/useGitStore'
 import { useWorktreeStatusStore } from '@/stores/useWorktreeStatusStore'
 import { useVimModeStore } from '@/stores/useVimModeStore'
@@ -134,7 +135,9 @@ export function Header(): React.JSX.Element {
   )
   const showVimHints = vimModeEnabled && vimMode === 'normal'
   const isBoardViewActive = useKanbanStore((s) => s.isBoardViewActive)
+  const isUserBoardActive = useKanbanStore((s) => s.isUserBoardActive)
   const toggleBoardView = useKanbanStore((s) => s.toggleBoardView)
+  const setUserBoardActive = useKanbanStore((s) => s.setUserBoardActive)
   const kanbanIconSeen = useTipStore((s) => s.isTipSeen('kanban-icon'))
   const nonDefaultProviderChosen = useTipStore((s) => s.nonDefaultProviderChosen)
   const [conflictFixFlow, setConflictFixFlow] = useState<ConflictFixFlow | null>(null)
@@ -991,6 +994,25 @@ export function Header(): React.JSX.Element {
             </Button>
           </Tip>
         )}
+        <Button
+          variant={isUserBoardActive ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => {
+            const fileStore = useFileViewerStore.getState()
+            fileStore.clearActiveViews()
+            const nextActive = !isUserBoardActive
+            setUserBoardActive(nextActive)
+            if (nextActive) {
+              setActiveSession(BOARD_TAB_ID)
+            }
+          }}
+          title={isUserBoardActive ? 'Close User Board' : 'Open User Board'}
+          data-testid="user-board-toggle"
+          className="h-8 gap-1.5 px-2 text-xs"
+        >
+          <UserRound className="h-3.5 w-3.5" />
+          User
+        </Button>
         <Button
           variant="ghost"
           size="icon"

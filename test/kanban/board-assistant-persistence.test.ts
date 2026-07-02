@@ -193,4 +193,21 @@ describe('board assistant persistence', () => {
       'materialized-1'
     )
   })
+
+  test('keeps only recent board assistant messages in memory', () => {
+    const boardChat = useBoardChatStore.getState()
+
+    boardChat.activateScope(projectScope, { scope: projectScope })
+    for (let i = 0; i < 130; i += 1) {
+      useBoardChatStore.getState().addLocalUserMessage(`message-${i}`)
+    }
+
+    const state = useBoardChatStore.getState()
+    const snapshot = state.getProjectSnapshot('proj-1')
+
+    expect(state.messages).toHaveLength(120)
+    expect(state.messages[0]?.content).toBe('message-10')
+    expect(state.messages.at(-1)?.content).toBe('message-129')
+    expect(snapshot?.messages).toHaveLength(120)
+  })
 })

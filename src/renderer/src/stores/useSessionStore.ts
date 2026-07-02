@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import type { SelectedModel } from './useSettingsStore'
 import { useWorktreeStore } from './useWorktreeStore'
+import { useFileViewerStore } from './useFileViewerStore'
 import { notifyKanbanSessionSync, notifyKanbanNewSession } from './store-coordination'
 import { useSettingsStore } from './useSettingsStore'
 import { getUnavailableAgentSdkMessage } from '@/lib/agent-sdk-availability'
@@ -196,6 +197,7 @@ interface SessionState {
   ) => Promise<{ success: boolean; session?: Session; error?: string }>
   closeBoardAssistantSession: (projectId: string) => Promise<{ success: boolean; error?: string }>
   focusBoardAssistantSession: (projectId: string) => void
+  openBoardAssistantProject: (projectId: string) => void
   clearBoardAssistantFocus: () => void
 
   // Connection session actions
@@ -1597,6 +1599,8 @@ export const useSessionStore = create<SessionState>()(
             agent_sdk: useSettingsStore.getState().defaultAgentSdk ?? 'opencode'
           })
 
+          useFileViewerStore.getState().clearActiveViews()
+
           set((state) => {
             const map = new Map(state.boardAssistantByProject)
             const newModeMap = new Map(state.modeBySession)
@@ -1722,9 +1726,22 @@ export const useSessionStore = create<SessionState>()(
         const session = get().boardAssistantByProject.get(projectId)
         if (!session) return
 
+        useFileViewerStore.getState().clearActiveViews()
+
         set({
           activeBoardAssistantProjectId: projectId,
           // Clear other active states so the board assistant view shows
+          activeSessionId: null,
+          activePinnedSessionId: null,
+          inlineConnectionSessionId: null
+        })
+      },
+
+      openBoardAssistantProject: (projectId: string) => {
+        useFileViewerStore.getState().clearActiveViews()
+
+        set({
+          activeBoardAssistantProjectId: projectId,
           activeSessionId: null,
           activePinnedSessionId: null,
           inlineConnectionSessionId: null
