@@ -87,8 +87,6 @@ interface KanbanTicketCardProps {
   connectionId?: string
   /** When viewing the pinned board (multi-project), show project tags */
   isPinnedMode?: boolean
-  /** User board shows all projects at once */
-  isAllProjectsMode?: boolean
 }
 
 export const KanbanTicketCard = memo(function KanbanTicketCard({
@@ -99,10 +97,9 @@ export const KanbanTicketCard = memo(function KanbanTicketCard({
   selected = false,
   onSelectedChange,
   connectionId,
-  isPinnedMode,
-  isAllProjectsMode
+  isPinnedMode
 }: KanbanTicketCardProps) {
-  const isMultiProjectMode = !!connectionId || !!isPinnedMode || !!isAllProjectsMode
+  const isMultiProjectMode = !!connectionId || !!isPinnedMode
 
   const [isDragging, setIsDragging] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)

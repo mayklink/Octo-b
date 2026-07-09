@@ -107,8 +107,6 @@ interface KanbanState {
   isLoading: boolean
   /** Whether the kanban board view is active — persisted to localStorage */
   isBoardViewActive: boolean
-  /** User mode shows a global board across all projects */
-  isUserBoardActive: boolean
   /** Per-project simple mode toggle — persisted to localStorage */
   simpleModeByProject: Record<string, boolean>
   /** Currently selected ticket ID for the detail modal (null = closed) */
@@ -139,7 +137,6 @@ interface KanbanState {
   ) => Promise<void>
   reorderTicket: (ticketId: string, projectId: string, newSortOrder: number) => Promise<void>
   toggleBoardView: () => void
-  setUserBoardActive: (active: boolean) => void
   setSimpleMode: (projectId: string, enabled: boolean) => Promise<void>
   archiveTicket: (ticketId: string, projectId: string) => Promise<void>
   archiveAllDone: (projectId: string) => Promise<number>
@@ -158,8 +155,6 @@ interface KanbanState {
   getTicketsForProject: (projectId: string) => KanbanTicket[]
   getTicketsByColumn: (projectId: string, column: KanbanTicketColumn) => KanbanTicket[]
   getArchivedTicketsByColumn: (projectId: string, column: KanbanTicketColumn) => KanbanTicket[]
-  loadTicketsForAllProjects: (projectIds: string[]) => Promise<void>
-  getTicketsByColumnForProjects: (projectIds: string[], column: KanbanTicketColumn) => KanbanTicket[]
 
   // ── Connection-level accessors ──────────────────────────────────────
   getConnectionProjectIds: (connectionId: string) => string[]
@@ -203,7 +198,6 @@ export const useKanbanStore = create<KanbanState>()(
       tickets: new Map(),
       isLoading: false,
       isBoardViewActive: false,
-      isUserBoardActive: false,
       isPinnedBoardActive: false,
       simpleModeByProject: {} as Record<string, boolean>,
       selectedTicketId: null,
@@ -605,17 +599,8 @@ export const useKanbanStore = create<KanbanState>()(
       // ── toggleBoardView ──────────────────────────────────────────
       toggleBoardView: () => {
         set((state) => ({
-          isBoardViewActive: !state.isBoardViewActive,
-          isUserBoardActive: false
+          isBoardViewActive: !state.isBoardViewActive
         }))
-      },
-
-      setUserBoardActive: (active: boolean) => {
-        set({
-          isUserBoardActive: active,
-          isBoardViewActive: active,
-          isPinnedBoardActive: false
-        })
       },
 
       // ── setSimpleMode ────────────────────────────────────────────
@@ -863,41 +848,6 @@ export const useKanbanStore = create<KanbanState>()(
         return tickets
           .filter((t) => t.column === column && t.archived_at)
           .sort((a, b) => (b.archived_at ?? '').localeCompare(a.archived_at ?? ''))
-      },
-
-      loadTicketsForAllProjects: async (projectIds: string[]) => {
-        if (projectIds.length === 0) return
-
-        set({ isLoading: true })
-        try {
-          const includeArchived = (pid: string) => get().showArchivedByProject[pid] ?? get().showArchivedByProject[''] ?? false
-          const results = await mapWithConcurrency(
-            projectIds,
-            (pid) => window.kanban.ticket.getByProject(pid, includeArchived(pid))
-          )
-
-          set((state) => {
-            const newTickets = new Map(state.tickets)
-            projectIds.forEach((pid, i) => {
-              newTickets.set(pid, results[i])
-            })
-            return { tickets: newTickets }
-          })
-
-          for (const pid of projectIds) {
-            get().loadDependencies(pid)
-          }
-        } catch (error) {
-          console.error('Failed to load tickets for all projects:', error)
-        } finally {
-          set({ isLoading: false })
-        }
-      },
-
-      getTicketsByColumnForProjects: (projectIds: string[], column: KanbanTicketColumn): KanbanTicket[] => {
-        const merged = projectIds.flatMap((pid) => get().getTicketsByColumn(pid, column))
-        merged.sort((a, b) => a.sort_order - b.sort_order)
-        return merged
       },
 
       // ── getConnectionProjectIds ─────────────────────────────────

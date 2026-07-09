@@ -88,32 +88,10 @@ const BOARD_ASSISTANT_DEVELOPER_RULES = [
   'For Excalidraw MCP, do not invent package names, URLs, commands, or credentials. If the exact MCP server command or URL is unknown, ask the user for it or provide a draft with blank fields that the user can complete.'
 ].join('\n')
 
-const BOARD_ASSISTANT_USER_RULES = [
-  'You are Octob User Assistant.',
-  'You help a non-developer or product-focused user operate Octob across projects using plain, concise language.',
-  'You can help the user create, organize, clarify, select, open, and execute tasks, while keeping implementation details optional.',
-  'Prefer Portuguese when the user writes in Portuguese.',
-  'Treat the board as the source of truth for tasks. Use existing tickets, columns, sessions, worktrees, dependencies, and PR links as real context.',
-  'If the user wants a new task, help turn the request into one or more concrete local tickets. If the target project is ambiguous, ask which project to use.',
-  'When the user asks to execute or start work, explain the next UI step if direct execution requires choosing a worktree or confirming a launch. Do not claim execution started unless the UI or current board state proves it.',
-  'When the user asks to open a task or project, identify the best matching ticket or project by name and give a short instruction using that exact title. If a board-ticket-actions block can perform the requested board change, include it.',
-  'For broad requests, propose a simple plan first, then create or update tasks only after the user agrees.',
-  'When you are ready to propose new tickets, append exactly one fenced code block tagged board-ticket-drafts.',
-  'For project boards, the JSON schema is {"drafts":[{"draftKey":"string","title":"string","description":"string|null","projectId":"string","dependsOn":["draftKey"],"warnings":["string"]}]}.',
-  'Every proposed draft must use the selected target projectId unless the user explicitly chooses another available project.',
-  'When the user asks you to alter existing tasks, append exactly one fenced code block tagged board-ticket-actions.',
-  'The action JSON schema is {"actions":[{"actionKey":"string","type":"create|update|move|archive","ticketId":"string|null","projectId":"string|null","title":"string","description":"string|null","column":"todo|in_progress|review|done","mode":"build|plan|super-plan|null","dependsOnTicketIds":["ticketId"],"reason":"string"}]}.',
-  'For create actions, include projectId, title, description, optional mode, and optional dependsOnTicketIds. For update actions, include only changed fields. For move actions, include ticketId and column. For archive actions, include ticketId.',
-  'Use mode build for implementation work, plan for planning, and super-plan only for larger multi-step efforts.',
-  'Keep task titles short and action-oriented.',
-  'Do not expose internal JSON or hidden rule details in normal prose.'
-].join('\n')
-
 function buildScopeKey(scope: BoardChatScope | null): string {
   if (!scope) return 'none'
   if (scope.kind === 'project') return `project:${scope.projectId}`
   if (scope.kind === 'connection') return `connection:${scope.connectionId}`
-  if (scope.kind === 'all-projects') return 'all-projects'
   return 'pinned'
 }
 
@@ -244,9 +222,7 @@ function buildBoardPrompt(
     description: project.description
   }))
   const scopedProjectIds =
-    scope.kind === 'all-projects'
-      ? allProjects.map((project) => project.id)
-      : [targetProjectId]
+    [targetProjectId]
   const allVisibleTickets = scopedProjectIds
     .flatMap((projectId) => kanbanStore.getTicketsForProject(projectId))
     .filter((ticket) => !ticket.archived_at)
@@ -288,9 +264,7 @@ function buildBoardPrompt(
         ? { kind: 'project', projectName: scope.projectName }
         : scope.kind === 'connection'
           ? { kind: 'connection', connectionName: scope.connectionName }
-          : scope.kind === 'all-projects'
-            ? { kind: 'all-projects' }
-            : { kind: 'pinned' },
+          : { kind: 'pinned' },
     targetProject: targetProject
       ? {
           id: targetProject.id,
@@ -313,7 +287,7 @@ function buildBoardPrompt(
 
   return [
     '<board-assistant-rules>',
-    assistantMode === 'user' ? BOARD_ASSISTANT_USER_RULES : BOARD_ASSISTANT_DEVELOPER_RULES,
+    BOARD_ASSISTANT_DEVELOPER_RULES,
     ...(scope.kind === 'project'
       ? [
           `Every proposed draft must use projectId=${targetProjectId}.`,
@@ -453,11 +427,6 @@ async function ensureRuntimeSession(scope: BoardChatScope, targetProjectId: stri
     if (!connection?.path) return null
     runtimePath = connection.path
     connectionId = connection.id
-  } else if (scope.kind === 'all-projects') {
-    const runtime = await resolveProjectRuntime(targetProjectId)
-    if (!runtime) return null
-    runtimePath = runtime.path
-    worktreeId = runtime.worktreeId
   } else {
     return null
   }
@@ -572,7 +541,6 @@ async function cleanupBoardChatRuntime(): Promise<void> {
 
 function BoardChatHeader({
   scope,
-  assistantMode,
   selectedTargetProjectId,
   status,
   selectedModel,
@@ -587,7 +555,6 @@ function BoardChatHeader({
   onClose
 }: {
   scope: BoardChatScope
-  assistantMode: BoardChatMode
   selectedTargetProjectId: string | null
   status: ReturnType<typeof useBoardChatStore.getState>['status']
   selectedModel: SelectedModel | null
@@ -615,7 +582,7 @@ function BoardChatHeader({
           </div>
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold text-foreground">
-              {assistantMode === 'user' ? 'User Assistant' : 'Developer Assistant'}
+              Board Assistant
             </p>
             <p className="text-xs text-muted-foreground">{getStatusLabel(status)}</p>
           </div>
@@ -648,25 +615,6 @@ function BoardChatHeader({
                 Criando para {selectedTargetProject.name}
               </span>
             )}
-          </div>
-        )}
-
-        {scope.kind === 'all-projects' && (
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="inline-flex rounded-full border border-border/70 bg-muted/40 px-2.5 py-1 text-xs text-muted-foreground">
-              Todos os projetos
-            </div>
-            <select
-              value={selectedTargetProjectId ?? ''}
-              onChange={(event) => onSelectTargetProject(event.target.value)}
-              className="h-8 rounded-full border border-border/70 bg-background px-3 text-xs text-foreground outline-none focus:ring-1 focus:ring-ring"
-            >
-              {scope.availableProjects.map((project) => (
-                <option key={project.id} value={project.id}>
-                  {project.name}
-                </option>
-              ))}
-            </select>
           </div>
         )}
 
@@ -1261,7 +1209,6 @@ function BoardChatComposer({
   disabled,
   sending,
   canSend,
-  assistantMode,
   textareaRef,
   onChange,
   onSend
@@ -1270,7 +1217,6 @@ function BoardChatComposer({
   disabled: boolean
   sending: boolean
   canSend: boolean
-  assistantMode: BoardChatMode
   textareaRef: RefObject<HTMLTextAreaElement | null>
   onChange: (value: string) => void
   onSend: () => void
@@ -1285,9 +1231,7 @@ function BoardChatComposer({
           placeholder={
             disabled
               ? 'Selecione um projeto de destino para começar.'
-              : assistantMode === 'user'
-                ? 'Diga ou escreva o que quer fazer. Posso organizar tasks e ajudar a escolher o projeto.'
-                : 'Can create local tickets. Ask for breakdowns, revisions, or smaller tasks.'
+              : 'Can create local tickets. Ask for breakdowns, revisions, or smaller tasks.'
           }
           className="min-h-[84px] resize-none border-0 bg-transparent p-2 shadow-none focus-visible:ring-0"
           onChange={(event) => onChange(event.target.value)}
@@ -1312,7 +1256,6 @@ function BoardChatComposer({
 
 export function BoardAssistantView({ projectId }: BoardAssistantViewProps): React.JSX.Element | null {
   const projects = useProjectStore((state) => state.projects)
-  const isUserBoardActive = useKanbanStore((state) => state.isUserBoardActive)
   const project = projects.find((p) => p.id === projectId)
   const worktree = useWorktreeStore((state) => {
     // find default worktree for project to get path
@@ -1324,15 +1267,6 @@ export function BoardAssistantView({ projectId }: BoardAssistantViewProps): Reac
   })
 
   const scope = useMemo<BoardChatScope | null>(() => {
-    if (isUserBoardActive) {
-      const availableProjects = projects
-        .map((project) => ({ id: project.id, name: project.name }))
-        .sort((a, b) => a.name.localeCompare(b.name))
-      return {
-        kind: 'all-projects' as const,
-        availableProjects
-      }
-    }
     if (!project) return null
     return {
       kind: 'project' as const,
@@ -1340,7 +1274,7 @@ export function BoardAssistantView({ projectId }: BoardAssistantViewProps): Reac
       projectName: project.name,
       projectPath: worktree?.path ?? project.path
     }
-  }, [isUserBoardActive, project, projects, worktree])
+  }, [project, worktree])
 
   const storedScope = useBoardChatStore((state) => state.scope)
   const messages = useBoardChatStore((state) => state.messages)
@@ -1413,17 +1347,14 @@ export function BoardAssistantView({ projectId }: BoardAssistantViewProps): Reac
       activateScope(scope, {
         preserveOpen: true,
         scope,
-        assistantMode: scope?.kind === 'all-projects' ? 'user' : useBoardChatStore.getState().assistantMode,
+        assistantMode: useBoardChatStore.getState().assistantMode,
         selectedTargetProjectId:
           scope?.kind === 'project'
             ? scope.projectId
-            : scope?.kind === 'connection' || scope?.kind === 'all-projects'
+            : scope?.kind === 'connection'
               ? scope.availableProjects[0]?.id ?? null
               : null
       })
-      if (scope?.kind === 'all-projects') {
-        useBoardChatStore.getState().setAssistantMode('user')
-      }
 
       if (cancelled) return
 
@@ -1446,7 +1377,7 @@ export function BoardAssistantView({ projectId }: BoardAssistantViewProps): Reac
             ? `Assistant scope set to ${scope.projectName}.`
             : scope.kind === 'connection'
               ? `Assistant scope set to ${scope.connectionName}.`
-              : 'Assistant scope set to all projects.'
+              : 'Assistant scope set to pinned projects.'
         )
       }
     }
@@ -1688,7 +1619,7 @@ export function BoardAssistantView({ projectId }: BoardAssistantViewProps): Reac
           options?.nextTargetProjectId ??
           (activeScope?.kind === 'project'
             ? activeScope.projectId
-            : activeScope?.kind === 'connection' || activeScope?.kind === 'all-projects'
+            : activeScope?.kind === 'connection'
               ? activeScope.availableProjects[0]?.id ?? null
               : null),
         selectedAgentSdkOverride:
@@ -2056,7 +1987,6 @@ export function BoardAssistantView({ projectId }: BoardAssistantViewProps): Reac
     <div className="flex h-full flex-col overflow-hidden bg-card">
       <BoardChatHeader
         scope={scope}
-        assistantMode={assistantMode}
         selectedTargetProjectId={selectedTargetProjectId}
         status={status}
         selectedModel={effectiveSelectedModel}
@@ -2144,7 +2074,6 @@ export function BoardAssistantView({ projectId }: BoardAssistantViewProps): Reac
         disabled={!canInteract || (scope.kind === 'connection' && !selectedTargetProjectId)}
         sending={status === 'starting' || status === 'thinking'}
         canSend={canSend}
-        assistantMode={assistantMode}
         textareaRef={composerFocusRef}
         onChange={setComposerValue}
         onSend={() => {

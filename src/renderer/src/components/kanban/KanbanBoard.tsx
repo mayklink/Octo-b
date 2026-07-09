@@ -6,11 +6,9 @@ import { usePinnedStore } from '@/stores/usePinnedStore'
 import { useBoardChatStore } from '@/stores/useBoardChatStore'
 import { useSessionStore } from '@/stores/useSessionStore'
 import { useFileViewerStore } from '@/stores/useFileViewerStore'
-import { useProjectStore } from '@/stores/useProjectStore'
 import { KanbanColumn } from '@/components/kanban/KanbanColumn'
 import { KanbanTicketModal } from '@/components/kanban/KanbanTicketModal'
 import { BoardChatLauncher } from '@/components/kanban/BoardChatLauncher'
-import { KanbanIcon } from '@/components/kanban/KanbanIcon'
 import { MergeOnDoneDialog } from './MergeOnDoneDialog'
 import { toast } from '@/lib/toast'
 import type { KanbanTicketColumn } from '../../../../main/db/types'
@@ -23,48 +21,34 @@ interface KanbanBoardProps {
   projectPath?: string
   connectionId?: string
   isPinnedMode?: boolean
-  isAllProjectsMode?: boolean
 }
 
-export function KanbanBoard({ projectId, projectPath: _projectPath, connectionId, isPinnedMode, isAllProjectsMode }: KanbanBoardProps) {
+export function KanbanBoard({ projectId, projectPath: _projectPath, connectionId, isPinnedMode }: KanbanBoardProps) {
   const loadTickets = useKanbanStore((state) => state.loadTickets)
   const loadTicketsForConnection = useKanbanStore((state) => state.loadTicketsForConnection)
   const loadTicketsForPinnedProjects = useKanbanStore((state) => state.loadTicketsForPinnedProjects)
-  const loadTicketsForAllProjects = useKanbanStore((state) => state.loadTicketsForAllProjects)
   const getTicketsByColumn = useKanbanStore((state) => state.getTicketsByColumn)
   const getTicketsByColumnForConnection = useKanbanStore((state) => state.getTicketsByColumnForConnection)
   const getTicketsByColumnForPinned = useKanbanStore((state) => state.getTicketsByColumnForPinned)
-  const getTicketsByColumnForProjects = useKanbanStore((state) => state.getTicketsByColumnForProjects)
   const getArchivedTicketsByColumn = useKanbanStore((state) => state.getArchivedTicketsByColumn)
   const getConnectionProjectIds = useKanbanStore((state) => state.getConnectionProjectIds)
   const getPinnedProjectIdsArray = useKanbanStore((state) => state.getPinnedProjectIdsArray)
-  const projects = useProjectStore((state) => state.projects)
-  const allProjectIdsKey = useMemo(
-    () => projects.map((project) => project.id).sort().join(PROJECT_IDS_KEY_SEPARATOR),
-    [projects]
-  )
-  const allProjectIds = useMemo(
-    () => (allProjectIdsKey ? allProjectIdsKey.split(PROJECT_IDS_KEY_SEPARATOR) : []),
-    [allProjectIdsKey]
-  )
   const pinnedProjectIds = usePinnedStore((state) => state.pinnedProjectIds)
   const pinnedProjectIdsKey = useMemo(
     () => Array.from(pinnedProjectIds).sort().join(PROJECT_IDS_KEY_SEPARATOR),
     [pinnedProjectIds]
   )
   const isConnectionMode = !!connectionId
-  const assistantProjectId = projectId ?? (connectionId ? getConnectionProjectIds(connectionId)[0] : allProjectIds[0])
+  const assistantProjectId = projectId ?? (connectionId ? getConnectionProjectIds(connectionId)[0] : null)
   const boardChatStatus = useBoardChatStore((state) => {
     if (!assistantProjectId) return 'idle'
     const key = `project:${assistantProjectId}`
     if (state.activeScopeKey === key) return state.status
     return state.snapshots[key]?.status ?? 'idle'
   })
-  const setProjectAssistantMode = useBoardChatStore((state) => state.setProjectAssistantMode)
   const boardAssistantByProject = useSessionStore((state) => state.boardAssistantByProject)
   const createBoardAssistantSession = useSessionStore((s) => s.createBoardAssistantSession)
   const focusBoardAssistantSession = useSessionStore((s) => s.focusBoardAssistantSession)
-  const openBoardAssistantProject = useSessionStore((s) => s.openBoardAssistantProject)
 
   // Dependency mode subscriptions
   const dependencyMode = useKanbanStore((state) => state.dependencyMode)
@@ -101,21 +85,14 @@ export function KanbanBoard({ projectId, projectPath: _projectPath, connectionId
   useKanbanStore((state) => state.tickets)
 
   useEffect(() => {
-    if (!isAllProjectsMode || !assistantProjectId) return
-    setProjectAssistantMode(assistantProjectId, 'user')
-  }, [assistantProjectId, isAllProjectsMode, setProjectAssistantMode])
-
-  useEffect(() => {
-    if (isAllProjectsMode) {
-      loadTicketsForAllProjects(allProjectIds)
-    } else if (isPinnedMode) {
+    if (isPinnedMode) {
       loadTicketsForPinnedProjects()
     } else if (isConnectionMode) {
       loadTicketsForConnection(connectionId)
     } else if (projectId) {
       loadTickets(projectId)
     }
-  }, [projectId, connectionId, isConnectionMode, isPinnedMode, isAllProjectsMode, allProjectIds, pinnedProjectIdsKey, showArchivedAll, loadTickets, loadTicketsForConnection, loadTicketsForPinnedProjects, loadTicketsForAllProjects])
+  }, [projectId, connectionId, isConnectionMode, isPinnedMode, pinnedProjectIdsKey, showArchivedAll, loadTickets, loadTicketsForConnection, loadTicketsForPinnedProjects])
 
   // ESC key handler for dependency mode
   useEffect(() => {
@@ -306,23 +283,8 @@ export function KanbanBoard({ projectId, projectPath: _projectPath, connectionId
             </h2>
           </div>
         )}
-        {isAllProjectsMode && (
-          <div className="flex items-center gap-2 px-3 pt-3 pb-0">
-            <KanbanIcon className="h-4 w-4 text-muted-foreground" />
-            <h2 className="text-sm font-medium text-muted-foreground">
-              User Board ({allProjectIds.length} projects)
-            </h2>
-          </div>
-        )}
         {/* Columns */}
-        {isAllProjectsMode && allProjectIds.length === 0 ? (
-          <div className="flex-1 flex items-center justify-center text-muted-foreground">
-            <div className="text-center">
-              <KanbanIcon className="h-8 w-8 mx-auto mb-3 opacity-50" />
-              <p className="text-sm">Add a project to start using User mode</p>
-            </div>
-          </div>
-        ) : isPinnedMode && pinnedProjectIdsArray.length === 0 ? (
+        {isPinnedMode && pinnedProjectIdsArray.length === 0 ? (
           <div className="flex-1 flex items-center justify-center text-muted-foreground">
             <div className="text-center">
               <Pin className="h-8 w-8 mx-auto mb-3 opacity-50" />
@@ -340,8 +302,6 @@ export function KanbanBoard({ projectId, projectPath: _projectPath, connectionId
             {COLUMNS.map((column) => {
               const tickets = isPinnedMode
                 ? getTicketsByColumnForPinned(column)
-                : isAllProjectsMode
-                  ? getTicketsByColumnForProjects(allProjectIds, column)
                 : isConnectionMode
                   ? getTicketsByColumnForConnection(connectionId, column)
                   : projectId
@@ -367,7 +327,6 @@ export function KanbanBoard({ projectId, projectPath: _projectPath, connectionId
                   projectId={projectId ?? ''}
                   connectionId={connectionId}
                   isPinnedMode={isPinnedMode}
-                  isAllProjectsMode={isAllProjectsMode}
                 />
               )
             })}
@@ -409,10 +368,6 @@ export function KanbanBoard({ projectId, projectPath: _projectPath, connectionId
             onClick={() => {
               if (!assistantProjectId) return
               useFileViewerStore.getState().clearActiveViews()
-              if (isAllProjectsMode) {
-                openBoardAssistantProject(assistantProjectId)
-                return
-              }
               const existing = boardAssistantByProject.get(assistantProjectId)
               if (existing) {
                 focusBoardAssistantSession(assistantProjectId)

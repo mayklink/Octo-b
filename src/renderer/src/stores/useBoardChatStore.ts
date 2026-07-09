@@ -15,7 +15,7 @@ export type BoardChatStatus =
   | 'awaiting_confirmation'
   | 'error'
 
-export type BoardChatMode = 'developer' | 'user'
+export type BoardChatMode = 'developer'
 
 export type BoardChatScope =
   | {
@@ -29,10 +29,6 @@ export type BoardChatScope =
       connectionId: string
       connectionName: string
       connectionPath: string
-      availableProjects: Array<{ id: string; name: string }>
-    }
-  | {
-      kind: 'all-projects'
       availableProjects: Array<{ id: string; name: string }>
     }
   | {
@@ -107,7 +103,6 @@ interface BoardChatState extends BoardChatSnapshot {
   toggleDraftSelected: (draftId: string) => void
   markDraftsCreated: (draftIds: string[]) => void
   setAssistantMode: (mode: BoardChatMode) => void
-  setProjectAssistantMode: (projectId: string, mode: BoardChatMode) => void
   setSelectedTargetProjectId: (projectId: string | null) => Promise<void>
   setSelectedAgentSdkOverride: (sdk: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | null) => void
   setSelectedModelOverride: (model: SelectedModel | null) => void
@@ -225,7 +220,7 @@ function makeLocalMessage(role: OpenCodeMessage['role'], content: string): Board
 function buildDefaultTargetProjectId(scope: BoardChatScope | null): string | null {
   if (!scope) return null
   if (scope.kind === 'project') return scope.projectId
-  if (scope.kind === 'connection' || scope.kind === 'all-projects') return scope.availableProjects[0]?.id ?? null
+  if (scope.kind === 'connection') return scope.availableProjects[0]?.id ?? null
   return null
 }
 
@@ -265,7 +260,6 @@ function getScopeKey(scope: BoardChatScope | null): string {
   if (!scope) return 'none'
   if (scope.kind === 'project') return `project:${scope.projectId}`
   if (scope.kind === 'connection') return `connection:${scope.connectionId}`
-  if (scope.kind === 'all-projects') return 'all-projects'
   return 'pinned'
 }
 
@@ -354,7 +348,6 @@ function createBaseState(): Omit<
   | 'createSelected'
   | 'toggleDraftSelected'
   | 'setAssistantMode'
-  | 'setProjectAssistantMode'
   | 'setSelectedTargetProjectId'
   | 'openDrawer'
   | 'minimizeDrawer'
@@ -398,9 +391,6 @@ function getProjectName(scope: BoardChatScope | null, projectId: string): string
   if (!scope) return 'Unknown project'
   if (scope.kind === 'project') return scope.projectName
   if (scope.kind === 'connection') {
-    return scope.availableProjects.find((project) => project.id === projectId)?.name ?? 'Unknown project'
-  }
-  if (scope.kind === 'all-projects') {
     return scope.availableProjects.find((project) => project.id === projectId)?.name ?? 'Unknown project'
   }
   return 'Pinned projects'
@@ -943,38 +933,6 @@ export const useBoardChatStore = create<BoardChatState>((set, get) => ({
 
   setAssistantMode: (assistantMode) =>
     set((state) => patchActiveSnapshot(state, { assistantMode })),
-
-  setProjectAssistantMode: (projectId, assistantMode) =>
-    set((state) => {
-      const key = `project:${projectId}`
-      const currentSnapshot =
-        state.activeScopeKey === key ? getSnapshotFromState(state) : state.snapshots[key]
-      const nextSnapshot = currentSnapshot
-        ? {
-            ...currentSnapshot,
-            assistantMode,
-            selectedTargetProjectId: currentSnapshot.selectedTargetProjectId ?? projectId
-          }
-        : createInitialSnapshot({
-            assistantMode,
-            selectedTargetProjectId: projectId
-          })
-
-      const nextSnapshots = {
-        ...state.snapshots,
-        [key]: nextSnapshot
-      }
-
-      if (state.activeScopeKey === key) {
-        return {
-          assistantMode,
-          selectedTargetProjectId: state.selectedTargetProjectId ?? projectId,
-          snapshots: nextSnapshots
-        }
-      }
-
-      return { snapshots: nextSnapshots }
-    }),
 
   setSelectedTargetProjectId: async (projectId) => {
     const state = get()

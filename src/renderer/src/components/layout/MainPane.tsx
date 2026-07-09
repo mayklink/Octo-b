@@ -48,7 +48,6 @@ export function MainPane({ children }: MainPaneProps): React.JSX.Element {
   const activePinnedSessionId = useSessionStore((state) => state.activePinnedSessionId)
   const activeBoardAssistantProjectId = useSessionStore((state) => state.activeBoardAssistantProjectId)
   const isBoardViewActive = useKanbanStore((state) => state.isBoardViewActive)
-  const isUserBoardActive = useKanbanStore((state) => state.isUserBoardActive)
   const isPinnedBoardActive = useKanbanStore((state) => state.isPinnedBoardActive)
   const pinnedStoreLoaded = usePinnedStore((state) => state.loaded)
   const boardMode = useSettingsStore((s) => s.boardMode)
@@ -222,10 +221,6 @@ export function MainPane({ children }: MainPaneProps): React.JSX.Element {
     // Board assistant tab is active — render BoardAssistantView in main pane
     if (activeBoardAssistantProjectId && !activeFilePath && !activeDiff && !contextEditorWorktreeId) {
       return <BoardAssistantView key={activeBoardAssistantProjectId} projectId={activeBoardAssistantProjectId} />
-    }
-
-    if (isUserBoardActive && !activeFilePath && !activeDiff && !contextEditorWorktreeId) {
-      return <KanbanBoard isAllProjectsMode={true} />
     }
 
     // Sticky-tab board mode: render board when BOARD_TAB_ID is the active session
