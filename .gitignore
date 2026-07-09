@@ -9,7 +9,6 @@ out/
 # Environment
 .env
 .env.*
-!.env.signing.example
 
 # IDE
 .idea/
@@ -25,16 +24,6 @@ Thumbs.db
 *.log
 npm-debug.log*
 pnpm-debug.log*
-
-# Test coverage
-coverage/
-
-# Playwright
-test-results/
-playwright-report/
-
-# Electron Builder
-release/
 
 # Cached vendor binaries (e.g. libghostty.a)
 vendor/
@@ -54,13 +43,6 @@ vendor/
 
 # Local debug/playground scripts
 scripts/*
-!scripts/generate-icon.py
-!scripts/release-canary.sh
-!scripts/release-github.sh
-!scripts/finalize.sh
-!scripts/release.sh
-!scripts/prepare-win-deps.sh
-!scripts/codex-app-server-probe.ts
 # Electron native install / rebuild (postinstall + dev/build gates)
 !scripts/run-install-app-deps.cjs
 !scripts/run-electron-native-rebuild.cjs
@@ -69,10 +51,3 @@ scripts/*
 
 # Claude worktrees
 .claude/worktrees/
-
-# Windows cross-build cache
-.win-natives/
-.mac-natives-backup/
-
-# Superpowers brainstorm artifacts
-.superpowers/brainstorm/

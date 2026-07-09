@@ -33,20 +33,7 @@
     "build:mac": "test -f .env.signing && . ./.env.signing; electron-vite build && electron-builder --mac",
     "build:mac:unsigned": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-vite build && electron-builder --mac",
     "build:linux": "electron-vite build && electron-builder --linux",
-    "lint": "eslint . --ext .ts,.tsx",
-    "lint:fix": "eslint . --ext .ts,.tsx --fix",
-    "format": "prettier --write \"src/**/*.{ts,tsx,css}\"",
-    "check": "eslint . --ext .ts,.tsx && vitest run",
-    "probe:codex-app-server": "tsc -p tsconfig.scripts.json --outDir dist/scripts-probe && node dist/scripts-probe/scripts/codex-app-server-probe.js",
-    "codex:generate-schemas": "rm -rf src/shared/codex-schemas && codex app-server generate-ts --out src/shared/codex-schemas",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "test:e2e": "playwright test",
-    "build:native": "cd src/native && npx node-gyp rebuild",
-    "release": "bash scripts/release.sh",
-    "release:canary": "bash scripts/release-canary.sh",
-    "release:github": "bash scripts/release-github.sh",
-    "release:finalize": "bash scripts/finalize.sh"
+    "build:native": "cd src/native && npx node-gyp rebuild"
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "^0.21.0",
@@ -112,14 +99,8 @@
     "zustand": "^5.0.2"
   },
   "devDependencies": {
-    "@electron-toolkit/eslint-config-ts": "^3.1.0",
     "@electron-toolkit/tsconfig": "^2.0.0",
-    "@eslint/js": "^9.17.0",
-    "@playwright/test": "^1.49.1",
     "@tailwindcss/vite": "^4.0.0",
-    "@testing-library/jest-dom": "^6.6.3",
-    "@testing-library/react": "^16.1.0",
-    "@testing-library/user-event": "^14.5.2",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.10.2",
     "@types/react": "^19.0.1",
@@ -131,21 +112,11 @@
     "electron": "^41.0.0",
     "electron-builder": "^26.8.1",
     "electron-vite": "^5.0.0",
-    "eslint": "^9.17.0",
-    "eslint-plugin-react": "^7.37.2",
-    "eslint-plugin-react-hooks": "^5.1.0",
-    "eslint-plugin-react-refresh": "^0.4.16",
-    "globals": "^15.14.0",
-    "jsdom": "^25.0.1",
-    "prettier": "^3.4.2",
-    "shadcn": "^3.8.2",
     "tailwind-merge": "^2.6.0",
     "tailwindcss": "^4.0.0",
     "tailwindcss-animate": "^1.0.7",
     "typescript": "^5.7.2",
-    "typescript-eslint": "^8.18.2",
-    "vite": "^6.0.5",
-    "vitest": "^3.2.4"
+    "vite": "^6.0.5"
   },
   "optionalDependencies": {
     "fsevents": "2.3.3"
