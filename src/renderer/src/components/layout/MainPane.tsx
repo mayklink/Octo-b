@@ -20,6 +20,7 @@ import { BoardAssistantView } from '@/components/kanban/BoardAssistantView'
 import { PRNotificationStack } from '@/components/pr/PRNotificationStack'
 import { MainPaneTerminalPanel } from './MainPaneTerminalPanel'
 import { SettingsView } from '@/components/settings'
+import { ProjectDashboard } from '@/components/projects/ProjectDashboard'
 
 const SESSION_TERMINAL_VIEW_IDLE_UNMOUNT_MS = 60_000
 const MAX_MOUNTED_SESSION_TERMINAL_VIEWS = 2
@@ -45,6 +46,8 @@ export function MainPane({ children }: MainPaneProps): React.JSX.Element {
   const contextEditorWorktreeId = useFileViewerStore((state) => state.contextEditorWorktreeId)
   const closedTerminalSessionIds = useSessionStore((state) => state.closedTerminalSessionIds)
   const ghosttyOverlaySuppressed = useLayoutStore((state) => state.ghosttyOverlaySuppressed)
+  const workspaceView = useLayoutStore((state) => state.workspaceView)
+  const workspaceContentView = useLayoutStore((state) => state.workspaceContentView)
   const activePinnedSessionId = useSessionStore((state) => state.activePinnedSessionId)
   const activeBoardAssistantProjectId = useSessionStore((state) => state.activeBoardAssistantProjectId)
   const isBoardViewActive = useKanbanStore((state) => state.isBoardViewActive)
@@ -122,6 +125,10 @@ export function MainPane({ children }: MainPaneProps): React.JSX.Element {
   // Determine which terminal session is currently visible (if any).
   // A terminal is visible when it's the active session AND no diff/file/loading overlay is on top.
   const visibleTerminalId = useMemo(() => {
+    if (workspaceContentView !== 'session') {
+      return null
+    }
+
     if (ghosttyOverlaySuppressed) {
       return null
     }
@@ -146,6 +153,7 @@ export function MainPane({ children }: MainPaneProps): React.JSX.Element {
   }, [
     activeSessionId,
     inlineConnectionSessionId,
+    workspaceContentView,
     activeDiff,
     activeFilePath,
     getAgentSdk,
@@ -223,6 +231,25 @@ export function MainPane({ children }: MainPaneProps): React.JSX.Element {
       return <BoardAssistantView key={activeBoardAssistantProjectId} projectId={activeBoardAssistantProjectId} />
     }
 
+    if (
+      workspaceView === 'projects' &&
+      !activeFilePath &&
+      !activeDiff &&
+      !contextEditorWorktreeId
+    ) {
+      return <ProjectDashboard />
+    }
+
+    if (
+      workspaceContentView === 'overview' &&
+      (workspaceView === 'project' || workspaceView === 'connection') &&
+      !activeFilePath &&
+      !activeDiff &&
+      !contextEditorWorktreeId
+    ) {
+      return <ProjectDashboard />
+    }
+
     // Sticky-tab board mode: render board when BOARD_TAB_ID is the active session
     if (boardMode === 'sticky-tab' && activeSessionId === BOARD_TAB_ID && !inlineConnectionSessionId && !activeFilePath && !activeDiff && !contextEditorWorktreeId) {
       // Pinned board takes priority when active
@@ -281,16 +308,9 @@ export function MainPane({ children }: MainPaneProps): React.JSX.Element {
       )
     }
 
-    // No worktree or connection selected - show welcome message
-    if (!selectedWorktreeId && !selectedConnectionId) {
-      return (
-        <div className="flex-1 flex items-center justify-center text-muted-foreground">
-          <div className="text-center">
-            <p className="text-lg font-medium">Welcome to Octob</p>
-            <p className="text-sm mt-2">Select a project or worktree to get started.</p>
-          </div>
-        </div>
-      )
+    // Project dashboard - primary project/worktree surface
+    if (!selectedWorktreeId && !selectedConnectionId && !activeFilePath && !activeDiff && !contextEditorWorktreeId) {
+      return <ProjectDashboard />
     }
 
     // Loading sessions (including auto-start)

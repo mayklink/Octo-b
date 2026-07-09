@@ -91,38 +91,37 @@
 
 .dark {
   color-scheme: dark;
-  /* OctoB dark shell — #0f0f1a background, #1e1b2e elevated / sidebar */
-  --background: #0f0f1a;
-  --foreground: hsl(260 15% 93%);
-  --card: #161525;
-  --card-foreground: hsl(260 10% 95%);
-  --popover: #161525;
-  --popover-foreground: hsl(260 10% 95%);
-  --primary: #a855f7;
+  --background: #090d14;
+  --foreground: #e6edf7;
+  --card: #111823;
+  --card-foreground: #edf3fb;
+  --popover: #111823;
+  --popover-foreground: #edf3fb;
+  --primary: #2f7dff;
   --primary-foreground: #fafafa;
-  --secondary: #1e1b2e;
-  --secondary-foreground: hsl(260 10% 90%);
-  --muted: #1e1b2e;
-  --muted-foreground: hsl(260 12% 58%);
-  --accent: #231f35;
-  --accent-foreground: hsl(260 10% 90%);
+  --secondary: #151d29;
+  --secondary-foreground: #dbe6f5;
+  --muted: #151d29;
+  --muted-foreground: #8290a3;
+  --accent: #1a2534;
+  --accent-foreground: #e5edf8;
   --destructive: var(--color-red-500);
   --destructive-foreground: var(--color-white);
-  --border: hsl(255 22% 22%);
-  --input: hsl(255 22% 24%);
+  --border: #253244;
+  --input: #263346;
   --ring: var(--primary);
   --chart-1: oklch(70.34% 0.127 227.39);
   --chart-2: oklch(69.26% 0.128 184.7);
   --chart-3: oklch(98.48% 0.001 285.98);
   --chart-4: oklch(74.11% 0.164 68.11);
   --chart-5: oklch(65.91% 0.204 41.12);
-  --sidebar: #1e1b2e;
-  --sidebar-foreground: hsl(260 12% 62%);
+  --sidebar: #0d131d;
+  --sidebar-foreground: #93a0b3;
   --sidebar-primary: var(--primary);
   --sidebar-primary-foreground: var(--color-white);
-  --sidebar-accent: #282344;
-  --sidebar-accent-foreground: hsl(260 10% 90%);
-  --sidebar-border: hsl(255 22% 22%);
+  --sidebar-accent: #172131;
+  --sidebar-accent-foreground: #e5edf8;
+  --sidebar-border: #253244;
   --sidebar-ring: var(--primary);
 }
 
@@ -133,7 +132,7 @@
   }
   body {
     @apply bg-background text-foreground;
-    font-size: 18px;
+    font-size: 14px;
     font-feature-settings:
       'rlig' 1,
       'calt' 1;
@@ -208,10 +207,16 @@ body::after {
   inset: 0;
   z-index: 9999;
   pointer-events: none;
-  opacity: 0.035;
+  opacity: 0.025;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.7' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   background-repeat: repeat;
   background-size: 256px 256px;
+}
+
+.dark body {
+  background:
+    linear-gradient(180deg, rgba(31, 49, 77, 0.26) 0%, rgba(9, 13, 20, 0) 180px),
+    var(--background);
 }
 
 /* Electron window drag utilities */

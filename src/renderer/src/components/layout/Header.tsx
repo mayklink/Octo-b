@@ -2,8 +2,6 @@ import React, { useCallback, useEffect, useState, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { isMac } from '@/lib/platform'
 import {
-  PanelLeftClose,
-  PanelLeftOpen,
   PanelRightClose,
   PanelRightOpen,
   History,
@@ -95,7 +93,13 @@ function isConflictFixActiveStatus(status: string | null): boolean {
 
 export function Header(): React.JSX.Element {
   const { t } = useTranslation()
-  const { leftSidebarCollapsed, rightSidebarCollapsed, toggleLeftSidebar, toggleRightSidebar } =
+  const {
+    rightSidebarCollapsed,
+    toggleRightSidebar,
+    workspaceView,
+    setWorkspaceView,
+    setWorkspaceContentView
+  } =
     useLayoutStore()
   const { openPanel: openSessionHistory } = useSessionHistoryStore()
   const openSettings = useSettingsStore((s) => s.openSettings)
@@ -350,46 +354,128 @@ export function Header(): React.JSX.Element {
     >
       {/* Spacer for macOS traffic lights */}
       {isMac() && <div className="w-16 flex-shrink-0" />}
-      <div className="flex items-center gap-2 flex-1 min-w-0">
+      <div className="flex items-stretch gap-1 flex-1 min-w-0 self-stretch">
         <Button
           variant="ghost"
-          size="icon"
-          onClick={toggleLeftSidebar}
-          title={leftSidebarCollapsed ? 'Show projects sidebar' : 'Hide projects sidebar'}
-          data-testid="left-sidebar-toggle"
-          className="h-8 w-8 shrink-0"
+          size="sm"
+          onClick={() => {
+            setWorkspaceView('projects')
+            setWorkspaceContentView('overview')
+            useFileViewerStore.getState().clearActiveViews()
+            useKanbanStore.setState({ isBoardViewActive: false, isPinnedBoardActive: false })
+          }}
+          className={cn(
+            'h-full rounded-none border-b-2 gap-2 px-3 text-sm font-semibold',
+            workspaceView === 'projects'
+              ? 'border-primary bg-accent/45 text-foreground'
+              : 'border-transparent text-muted-foreground hover:text-foreground'
+          )}
+          title="Projects"
+          data-testid="top-projects-nav"
           style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
         >
-          {leftSidebarCollapsed ? (
-            <PanelLeftOpen className="h-4 w-4" />
-          ) : (
-            <PanelLeftClose className="h-4 w-4" />
-          )}
+          <OctobMark className="h-5 w-5 shrink-0" />
+          Projects
         </Button>
-        <OctobMark className="h-5 w-5 shrink-0" />
-        {isConnectionMode && selectedConnection ? (
-          <span className="text-sm font-medium truncate" data-testid="header-connection-info">
-            {selectedConnection.name}
-            <span className="text-primary font-normal">
-              {' '}
-              ({selectedConnection.members.map((m) => m.project_name).join(' + ')})
-            </span>
-          </span>
-        ) : selectedProject ? (
-          <span className="text-sm font-medium truncate" data-testid="header-project-info">
-            {selectedProject.name}
-            {selectedWorktree?.branch_name && selectedWorktree.name !== '(no-worktree)' && (
-              <span className="text-primary font-normal"> ({selectedWorktree.branch_name})</span>
+        {selectedProject && (
+          <div
+            className={cn(
+              'flex h-full max-w-72 min-w-0 items-center rounded-none border-b-2 text-sm font-semibold',
+              workspaceView === 'project'
+                ? 'border-primary bg-accent/45 text-foreground'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
             )}
-          </span>
-        ) : (
-          <span
-            className="text-sm font-medium flex items-baseline gap-1.5 min-w-0"
-            data-testid="header-brand-fallback"
+            title={selectedProject.path}
+            data-testid="top-project-tab"
+            style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
           >
-            <span>Octob</span>
-          </span>
+            <button
+              type="button"
+              onClick={() => {
+                setWorkspaceView('project')
+                setWorkspaceContentView('overview')
+                useConnectionStore.getState().selectConnection(null)
+                useProjectStore.getState().selectProject(selectedProject.id)
+                useWorktreeStore.getState().selectWorktree(null)
+                useFileViewerStore.getState().clearActiveViews()
+                useKanbanStore.setState({ isBoardViewActive: false, isPinnedBoardActive: false })
+              }}
+              className="flex h-full min-w-0 items-center gap-2 px-3"
+            >
+              <span className="truncate">{selectedProject.name}</span>
+              {selectedWorktree?.branch_name && selectedWorktree.name !== '(no-worktree)' && (
+                <span className="truncate text-primary font-normal">
+                  {selectedWorktree.branch_name}
+                </span>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation()
+                useProjectStore.getState().selectProject(null)
+                useWorktreeStore.getState().selectWorktree(null)
+                useFileViewerStore.getState().clearActiveViews()
+                useKanbanStore.setState({ isBoardViewActive: false, isPinnedBoardActive: false })
+                if (workspaceView === 'project') setWorkspaceView('projects')
+                setWorkspaceContentView('overview')
+              }}
+              className="mr-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+              title="Close tab"
+              aria-label="Close project tab"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
         )}
+        {isConnectionMode && selectedConnection ? (
+          <div
+            className={cn(
+              'flex h-full max-w-80 min-w-0 items-center rounded-none border-b-2 text-sm font-semibold',
+              workspaceView === 'connection'
+                ? 'border-primary bg-accent/45 text-foreground'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
+            )}
+            title={selectedConnection.path}
+            data-testid="top-connection-tab"
+            style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+          >
+            <button
+              type="button"
+              onClick={() => {
+                setWorkspaceView('connection')
+                setWorkspaceContentView('overview')
+                useConnectionStore.getState().selectConnection(selectedConnection.id)
+                useFileViewerStore.getState().clearActiveViews()
+                useKanbanStore.setState({ isBoardViewActive: true, isPinnedBoardActive: false })
+              }}
+              className="flex h-full min-w-0 items-center gap-2 px-3"
+            >
+              <span className="truncate">
+                {selectedConnection.custom_name || selectedConnection.name}
+              </span>
+              <span className="truncate text-primary font-normal">
+                {selectedConnection.members.map((m) => m.project_name).join(' + ')}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation()
+                useConnectionStore.getState().selectConnection(null)
+                useFileViewerStore.getState().clearActiveViews()
+                useKanbanStore.setState({ isBoardViewActive: false, isPinnedBoardActive: false })
+                if (workspaceView === 'connection') setWorkspaceView('projects')
+                setWorkspaceContentView('overview')
+              }}
+              className="mr-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+              title="Close tab"
+              aria-label="Close connection tab"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        ) : null}
         {keepAwakeEnabled && (
           <Tooltip>
             <TooltipTrigger asChild>

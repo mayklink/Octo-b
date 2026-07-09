@@ -31,6 +31,7 @@ import {
 } from 'lucide-react'
 import { KanbanIcon } from '@/components/kanban/KanbanIcon'
 import { useSessionStore, BOARD_TAB_ID } from '@/stores/useSessionStore'
+import { useLayoutStore } from '@/stores/useLayoutStore'
 import { useShallow } from 'zustand/react/shallow'
 import {
   useFileViewerStore,
@@ -591,6 +592,7 @@ export function SessionTabs(): React.JSX.Element | null {
   const pinnedSessionIds = useSessionStore((state) => state.pinnedSessionIds)
   const activePinnedSessionId = useSessionStore((state) => state.activePinnedSessionId)
   const boardMode = useSettingsStore((s) => s.boardMode)
+  const workspaceContentView = useLayoutStore((s) => s.workspaceContentView)
 
   // Board assistant state
   const boardAssistantByProject = useSessionStore((state) => state.boardAssistantByProject)
@@ -806,6 +808,8 @@ export function SessionTabs(): React.JSX.Element | null {
       const result = await createConnectionSession(selectedConnectionId)
       if (!result.success) {
         toast.error(result.error || 'Failed to create session')
+      } else {
+        useLayoutStore.getState().setWorkspaceContentView('session')
       }
       return
     }
@@ -815,6 +819,8 @@ export function SessionTabs(): React.JSX.Element | null {
     const result = await createSession(selectedWorktreeId, project.id)
     if (!result.success) {
       toast.error(result.error || 'Failed to create session')
+    } else {
+      useLayoutStore.getState().setWorkspaceContentView('session')
     }
   }
 
@@ -826,6 +832,8 @@ export function SessionTabs(): React.JSX.Element | null {
       const result = await createConnectionSession(selectedConnectionId, sdk)
       if (!result.success) {
         toast.error(result.error || 'Failed to create session')
+      } else {
+        useLayoutStore.getState().setWorkspaceContentView('session')
       }
       // Tip logic for AI providers (not terminal)
       if (sdk !== 'terminal') {
@@ -842,6 +850,8 @@ export function SessionTabs(): React.JSX.Element | null {
     const result = await createSession(selectedWorktreeId, project.id, sdk)
     if (!result.success) {
       toast.error(result.error || 'Failed to create session')
+    } else {
+      useLayoutStore.getState().setWorkspaceContentView('session')
     }
     // Tip logic for AI providers (not terminal)
     if (sdk !== 'terminal') {
@@ -904,6 +914,7 @@ export function SessionTabs(): React.JSX.Element | null {
 
     setActiveFile(null)
     clearInlineConnectionSession()
+    useLayoutStore.getState().setWorkspaceContentView('session')
     if (isConnectionMode) {
       setActiveConnectionSession(sessionId)
     } else {
@@ -922,8 +933,23 @@ export function SessionTabs(): React.JSX.Element | null {
     }
 
     setActiveFile(null)
+    useLayoutStore.getState().setWorkspaceContentView('session')
     setInlineConnectionSession(sessionId)
     useWorktreeStatusStore.getState().clearSessionStatus(sessionId)
+  }
+
+  const handleBoardTabClick = () => {
+    useFileViewerStore.getState().clearActiveViews()
+    clearInlineConnectionSession()
+    useSessionStore.getState().setActiveSession(null)
+    useSessionStore.getState().setActivePinnedSession(null)
+    useLayoutStore.getState().setWorkspaceContentView('overview')
+
+    if (isConnectionMode && selectedConnectionId) {
+      useLayoutStore.getState().setWorkspaceView('connection')
+    } else if (project) {
+      useLayoutStore.getState().setWorkspaceView('project')
+    }
   }
 
   // Handle clicking a file tab - keep session but activate file view
@@ -1077,6 +1103,11 @@ export function SessionTabs(): React.JSX.Element | null {
 
   // Sticky-tab mode: board is visible when its tab is selected and no file is foregrounded
   const isStickyBoardActive = boardMode === 'sticky-tab' && activeSessionId === BOARD_TAB_ID && !isFileTabActive
+  const isOverviewBoardTabActive =
+    workspaceContentView === 'overview' &&
+    !isFileTabActive &&
+    !inlineConnectionSessionId &&
+    !activePinnedSessionId
 
   /** Renders connection tabs + session tabs — shared between sticky-tab and normal mode */
   const renderSessionTabs = () => (
@@ -1282,32 +1313,24 @@ export function SessionTabs(): React.JSX.Element | null {
               data-testid="sticky-board-tab"
               role="tab"
               tabIndex={0}
-              onClick={() => {
-                useFileViewerStore.getState().clearActiveViews()
-                clearInlineConnectionSession()
-                useSessionStore.getState().setActiveSession(BOARD_TAB_ID)
-              }}
+              onClick={handleBoardTabClick}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
                   e.preventDefault()
-                  useFileViewerStore.getState().clearActiveViews()
-                  clearInlineConnectionSession()
-                  useSessionStore.getState().setActiveSession(BOARD_TAB_ID)
+                  handleBoardTabClick()
                 }
               }}
               className={cn(
                 'group relative flex items-center gap-1.5 px-3 py-1.5 text-sm cursor-pointer select-none',
                 'border-r border-border transition-colors min-w-[100px] max-w-[200px]',
-                activeSessionId === BOARD_TAB_ID && !isFileTabActive && !inlineConnectionSessionId
+                isOverviewBoardTabActive
                   ? 'bg-background text-foreground'
                   : 'bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground'
               )}
             >
               <KanbanIcon className="h-3.5 w-3.5 flex-shrink-0 text-blue-400" />
               <span className="truncate flex-1">Board</span>
-              {activeSessionId === BOARD_TAB_ID && !isFileTabActive && !inlineConnectionSessionId && (
-                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
-              )}
+              {isOverviewBoardTabActive && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />}
             </div>
             {/* Normal session tabs alongside the sticky board tab */}
             {renderSessionTabs()}
@@ -1317,21 +1340,18 @@ export function SessionTabs(): React.JSX.Element | null {
             {/* Toggle mode: Kanban board tab */}
             <div
               data-testid="kanban-board-tab"
-              onClick={() => {
-                useFileViewerStore.getState().clearActiveViews()
-                useSessionStore.getState().setActivePinnedSession(null)
-              }}
+              onClick={handleBoardTabClick}
               className={cn(
                 'group relative flex items-center gap-1.5 px-3 py-1.5 text-sm cursor-pointer select-none',
                 'border-r border-border transition-colors min-w-[100px] max-w-[200px]',
-                !isFileTabActive && !activePinnedSessionId
+                isOverviewBoardTabActive
                   ? 'bg-background text-foreground'
                   : 'bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground'
               )}
             >
               <KanbanIcon className="h-3.5 w-3.5 flex-shrink-0 text-blue-400" />
               <span className="truncate flex-1">Board</span>
-              {!isFileTabActive && !activePinnedSessionId && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />}
+              {isOverviewBoardTabActive && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />}
             </div>
             {/* Pinned session tabs */}
             {Array.from(pinnedSessionIds).map((sessionId) => {

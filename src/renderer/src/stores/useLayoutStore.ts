@@ -3,6 +3,8 @@ import { persist, createJSONStorage } from 'zustand/middleware'
 
 export type BottomPanelTab = 'setup' | 'run' | 'terminal'
 export type CollapsedPanel = 'none' | 'top' | 'bottom'
+export type WorkspaceView = 'projects' | 'project' | 'connection'
+export type WorkspaceContentView = 'overview' | 'session'
 
 const LEFT_SIDEBAR_DEFAULT = 240
 const LEFT_SIDEBAR_MIN = 200
@@ -25,6 +27,8 @@ interface LayoutState {
   rightSidebarWidth: number
   rightSidebarCollapsed: boolean
   bottomPanelTab: BottomPanelTab
+  workspaceView: WorkspaceView
+  workspaceContentView: WorkspaceContentView
   ghosttyOverlaySuppressed: boolean
   collapsedPanel: CollapsedPanel
   splitFractionByEntity: Record<string, number>
@@ -39,6 +43,8 @@ interface LayoutState {
   toggleRightSidebar: () => void
   setRightSidebarCollapsed: (collapsed: boolean) => void
   setBottomPanelTab: (tab: BottomPanelTab) => void
+  setWorkspaceView: (view: WorkspaceView) => void
+  setWorkspaceContentView: (view: WorkspaceContentView) => void
   setGhosttyOverlaySuppressed: (suppressed: boolean) => void
   pushGhosttySuppression: (key: string) => void
   popGhosttySuppression: (key: string) => void
@@ -55,6 +61,8 @@ export const useLayoutStore = create<LayoutState>()(
       rightSidebarWidth: RIGHT_SIDEBAR_DEFAULT,
       rightSidebarCollapsed: false,
       bottomPanelTab: 'setup' as BottomPanelTab,
+      workspaceView: 'projects' as WorkspaceView,
+      workspaceContentView: 'overview' as WorkspaceContentView,
       ghosttyOverlaySuppressed: false,
       collapsedPanel: 'none' as CollapsedPanel,
       splitFractionByEntity: {} as Record<string, number>,
@@ -100,6 +108,14 @@ export const useLayoutStore = create<LayoutState>()(
 
       setBottomPanelTab: (tab: BottomPanelTab) => {
         set({ bottomPanelTab: tab })
+      },
+
+      setWorkspaceView: (view: WorkspaceView) => {
+        set({ workspaceView: view })
+      },
+
+      setWorkspaceContentView: (view: WorkspaceContentView) => {
+        set({ workspaceContentView: view })
       },
 
       setGhosttyOverlaySuppressed: (suppressed: boolean) => {
