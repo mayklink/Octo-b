@@ -28,7 +28,7 @@ const OCTOB_MANIFEST: PetManifest = {
   id: 'octob',
   name: 'Octob',
   version: '1.0.0',
-  author: 'Octob',
+  author: 'Mayk Bublitz',
   assets: {
     idle: 'assets/octob.png',
     working: 'assets/octob.png',
