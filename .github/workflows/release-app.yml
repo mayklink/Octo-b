@@ -129,3 +129,4 @@ jobs:
               --title "Octob ${VERSION}" \
               --notes "Octob ${VERSION}" \
               "${RELEASE_FLAGS[@]}"
+          fi
