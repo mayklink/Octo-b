@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useEffect } from 'react'
 import { X, ChevronUp, ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useSettingsStore } from '@/stores/useSettingsStore'
@@ -8,6 +8,7 @@ import { FileTree } from './FileTree'
 import { ChangesView } from './ChangesView'
 import { BranchDiffView } from './BranchDiffView'
 import { PrReviewViewer } from '@/components/pr-review/PrReviewViewer'
+import { useLayoutStore, type RightSidebarTab } from '@/stores/useLayoutStore'
 
 interface ConnectionMemberInfo {
   worktree_path: string
@@ -36,7 +37,8 @@ export function FileSidebar({
   isCollapsed,
   onToggleCollapse
 }: FileSidebarProps): React.JSX.Element {
-  const [activeTab, setActiveTab] = useState<'changes' | 'files' | 'diffs' | 'comments'>('changes')
+  const activeTab = useLayoutStore((state) => state.rightSidebarTab)
+  const setActiveTab = useLayoutStore((state) => state.setRightSidebarTab)
   const vimModeEnabled = useSettingsStore((s) => s.vimModeEnabled)
   const selectedWorktreeId = useWorktreeStore((s) => s.selectedWorktreeId)
   const hasAttachedPR = useGitStore(
@@ -45,22 +47,21 @@ export function FileSidebar({
 
   useEffect(() => {
     const handler = (e: Event): void => {
-      if (!vimModeEnabled) return
-      const tab = (e as CustomEvent).detail?.tab
+      const tab = (e as CustomEvent<{ tab?: RightSidebarTab }>).detail?.tab
       if (tab === 'changes' || tab === 'files' || tab === 'diffs' || tab === 'comments') {
         setActiveTab(tab)
       }
     }
     window.addEventListener('octob:right-sidebar-tab', handler)
     return () => window.removeEventListener('octob:right-sidebar-tab', handler)
-  }, [vimModeEnabled])
+  }, [setActiveTab])
 
   // Switch away from comments tab if PR is detached
   useEffect(() => {
     if (!hasAttachedPR && activeTab === 'comments') {
       setActiveTab('changes')
     }
-  }, [hasAttachedPR, activeTab])
+  }, [hasAttachedPR, activeTab, setActiveTab])
 
   return (
     <div className={cn('flex flex-col h-full', className)}>

@@ -11,6 +11,7 @@ import { useTerminalPortal } from '@/contexts/TerminalPortalContext'
 import { useSettingsStore } from '@/stores/useSettingsStore'
 import { ErrorBoundary, ErrorFallback } from '@/components/error'
 import { cn } from '@/lib/utils'
+import { EnvironmentPanel } from './EnvironmentPanel'
 
 export function RightSidebar(): React.JSX.Element {
   const { rightSidebarWidth, rightSidebarCollapsed, setRightSidebarWidth, toggleRightSidebar } =
@@ -30,6 +31,7 @@ export function RightSidebar(): React.JSX.Element {
 
   const { registerTarget } = useTerminalPortal()
   const terminalPosition = useSettingsStore((s) => s.terminalPosition)
+  const visualizationMode = useLayoutStore((s) => s.visualizationMode)
 
   const sidebarTargetRef = useCallback(
     (el: HTMLDivElement | null) => registerTarget('sidebar', el),
@@ -113,6 +115,10 @@ export function RightSidebar(): React.JSX.Element {
         role="complementary"
         aria-label="File sidebar"
       >
+        {visualizationMode === 'advanced' && !isConnectionMode && selectedWorktreePath && (
+          <EnvironmentPanel worktreePath={selectedWorktreePath} />
+        )}
+
         {/* Top half: Tabbed sidebar (Changes / Files) */}
         <div
           className="flex flex-col min-h-0 overflow-hidden"

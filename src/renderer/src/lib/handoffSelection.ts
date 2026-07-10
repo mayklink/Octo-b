@@ -36,7 +36,7 @@ const SDK_DISPLAY_NAMES: Record<HandoffAgentSdk, string> = {
 const FALLBACK_MODELS: Record<HandoffAgentSdk, SelectedModel> = {
   opencode: { providerID: 'anthropic', modelID: 'claude-opus-4-5-20251101' },
   'claude-code': { providerID: 'anthropic', modelID: 'claude-opus-4-5-20251101' },
-  codex: { providerID: 'codex', modelID: 'gpt-5.5' },
+  codex: { providerID: 'codex', modelID: 'gpt-5.6-sol' },
   'mistral-vibe': { providerID: 'mistral-vibe', modelID: 'devstral-medium-latest' },
   'cursor-cli': { providerID: 'cursor-cli', modelID: 'auto' }
 }
