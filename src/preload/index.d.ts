@@ -1497,7 +1497,9 @@ declare global {
       create: (
         worktreeIds: string[]
       ) => Promise<{ success: boolean; connection?: ConnectionWithMembers; error?: string }>
-      delete: (connectionId: string) => Promise<{ success: boolean; error?: string }>
+      delete: (
+        connectionId: string
+      ) => Promise<{ success: boolean; warning?: string; error?: string }>
       addMember: (
         connectionId: string,
         worktreeId: string

@@ -56,7 +56,7 @@ export function registerConnectionHandlers(): void {
     async (
       _event,
       { connectionId }: { connectionId: string }
-    ): Promise<{ success: boolean; error?: string }> => {
+    ): Promise<{ success: boolean; warning?: string; error?: string }> => {
       const db = getDatabase()
       return deleteConnectionOp(db, connectionId)
     }

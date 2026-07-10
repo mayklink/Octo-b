@@ -120,6 +120,13 @@ export const useConnectionStore = create<ConnectionState>()(
 
       deleteConnection: async (connectionId: string) => {
         try {
+          // Close connection-scoped sessions first. Their PTYs/agent processes use
+          // the connection directory as cwd and otherwise prevent deletion on Windows.
+          const { useSessionStore } = await import('./useSessionStore')
+          const sessionStore = useSessionStore.getState()
+          const sessions = [...(sessionStore.sessionsByConnection.get(connectionId) || [])]
+          await Promise.all(sessions.map((session) => sessionStore.closeSession(session.id)))
+
           const result = await window.connectionOps.delete(connectionId)
           if (!result.success) {
             toast.error(result.error || 'Failed to delete connection')
@@ -135,7 +142,11 @@ export const useConnectionStore = create<ConnectionState>()(
               state.selectedConnectionId === connectionId ? null : state.selectedConnectionId
             return { connections, selectedConnectionId }
           })
-          toast.success('Connection deleted')
+          if (result.warning) {
+            toast.warning(result.warning)
+          } else {
+            toast.success('Connection deleted')
+          }
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error)
           toast.error(`Failed to delete connection: ${message}`)

@@ -132,7 +132,7 @@ export async function createConnectionOp(
 export async function deleteConnectionOp(
   db: DatabaseService,
   connectionId: string
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; warning?: string; error?: string }> {
   log.info('Deleting connection', { connectionId })
   try {
     const connection = db.getConnection(connectionId)
@@ -140,14 +140,28 @@ export async function deleteConnectionOp(
       return { success: false, error: 'Connection not found' }
     }
 
-    // Remove the filesystem directory (which contains the symlinks)
-    deleteConnectionDir(connection.path)
+    // A terminal/editor outside OctoB can keep this directory open on Windows.
+    // The connection record must still be deletable; otherwise it becomes stuck in
+    // the sidebar forever. Keep the residual directory and surface a warning so it
+    // can be removed after the external process releases it.
+    let cleanupWarning: string | undefined
+    try {
+      deleteConnectionDir(connection.path)
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error)
+      cleanupWarning = `Connection deleted, but its directory is still in use: ${connection.path}`
+      log.warn('Connection directory cleanup deferred', {
+        connectionId,
+        path: connection.path,
+        error: detail
+      })
+    }
 
     // Delete from DB (cascade removes connection_members)
     db.deleteConnection(connectionId)
 
     log.info('Connection deleted', { connectionId, name: connection.name })
-    return { success: true }
+    return { success: true, warning: cleanupWarning }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     log.error('Connection deletion failed', error instanceof Error ? error : new Error(message))
