@@ -5,6 +5,7 @@ export type BottomPanelTab = 'setup' | 'run' | 'terminal'
 export type CollapsedPanel = 'none' | 'top' | 'bottom'
 export type WorkspaceView = 'projects' | 'project' | 'connection'
 export type WorkspaceContentView = 'overview' | 'session'
+export type VisualizationMode = 'basic' | 'advanced'
 
 const LEFT_SIDEBAR_DEFAULT = 240
 const LEFT_SIDEBAR_MIN = 200
@@ -29,6 +30,7 @@ interface LayoutState {
   bottomPanelTab: BottomPanelTab
   workspaceView: WorkspaceView
   workspaceContentView: WorkspaceContentView
+  visualizationMode: VisualizationMode
   ghosttyOverlaySuppressed: boolean
   collapsedPanel: CollapsedPanel
   splitFractionByEntity: Record<string, number>
@@ -45,6 +47,7 @@ interface LayoutState {
   setBottomPanelTab: (tab: BottomPanelTab) => void
   setWorkspaceView: (view: WorkspaceView) => void
   setWorkspaceContentView: (view: WorkspaceContentView) => void
+  setVisualizationMode: (mode: VisualizationMode) => void
   setGhosttyOverlaySuppressed: (suppressed: boolean) => void
   pushGhosttySuppression: (key: string) => void
   popGhosttySuppression: (key: string) => void
@@ -63,6 +66,7 @@ export const useLayoutStore = create<LayoutState>()(
       bottomPanelTab: 'setup' as BottomPanelTab,
       workspaceView: 'projects' as WorkspaceView,
       workspaceContentView: 'overview' as WorkspaceContentView,
+      visualizationMode: 'basic' as VisualizationMode,
       ghosttyOverlaySuppressed: false,
       collapsedPanel: 'none' as CollapsedPanel,
       splitFractionByEntity: {} as Record<string, number>,
@@ -116,6 +120,10 @@ export const useLayoutStore = create<LayoutState>()(
 
       setWorkspaceContentView: (view: WorkspaceContentView) => {
         set({ workspaceContentView: view })
+      },
+
+      setVisualizationMode: (mode: VisualizationMode) => {
+        set({ visualizationMode: mode })
       },
 
       setGhosttyOverlaySuppressed: (suppressed: boolean) => {

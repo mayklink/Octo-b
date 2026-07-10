@@ -48,6 +48,7 @@ export function MainPane({ children }: MainPaneProps): React.JSX.Element {
   const ghosttyOverlaySuppressed = useLayoutStore((state) => state.ghosttyOverlaySuppressed)
   const workspaceView = useLayoutStore((state) => state.workspaceView)
   const workspaceContentView = useLayoutStore((state) => state.workspaceContentView)
+  const visualizationMode = useLayoutStore((state) => state.visualizationMode)
   const activePinnedSessionId = useSessionStore((state) => state.activePinnedSessionId)
   const activeBoardAssistantProjectId = useSessionStore((state) => state.activeBoardAssistantProjectId)
   const isBoardViewActive = useKanbanStore((state) => state.isBoardViewActive)
@@ -125,7 +126,7 @@ export function MainPane({ children }: MainPaneProps): React.JSX.Element {
   // Determine which terminal session is currently visible (if any).
   // A terminal is visible when it's the active session AND no diff/file/loading overlay is on top.
   const visibleTerminalId = useMemo(() => {
-    if (workspaceContentView !== 'session') {
+    if (visualizationMode === 'basic' && workspaceContentView !== 'session') {
       return null
     }
 
@@ -154,6 +155,7 @@ export function MainPane({ children }: MainPaneProps): React.JSX.Element {
     activeSessionId,
     inlineConnectionSessionId,
     workspaceContentView,
+    visualizationMode,
     activeDiff,
     activeFilePath,
     getAgentSdk,
@@ -232,6 +234,7 @@ export function MainPane({ children }: MainPaneProps): React.JSX.Element {
     }
 
     if (
+      visualizationMode === 'basic' &&
       workspaceView === 'projects' &&
       !activeFilePath &&
       !activeDiff &&
@@ -241,6 +244,7 @@ export function MainPane({ children }: MainPaneProps): React.JSX.Element {
     }
 
     if (
+      visualizationMode === 'basic' &&
       workspaceContentView === 'overview' &&
       (workspaceView === 'project' || workspaceView === 'connection') &&
       !activeFilePath &&
@@ -310,7 +314,15 @@ export function MainPane({ children }: MainPaneProps): React.JSX.Element {
 
     // Project dashboard - primary project/worktree surface
     if (!selectedWorktreeId && !selectedConnectionId && !activeFilePath && !activeDiff && !contextEditorWorktreeId) {
-      return <ProjectDashboard />
+      if (visualizationMode === 'basic') return <ProjectDashboard />
+      return (
+        <div className="flex-1 flex items-center justify-center text-muted-foreground">
+          <div className="text-center">
+            <p className="text-lg font-medium">Welcome to Octob</p>
+            <p className="text-sm mt-2">Select a project or worktree to get started.</p>
+          </div>
+        </div>
+      )
     }
 
     // Loading sessions (including auto-start)

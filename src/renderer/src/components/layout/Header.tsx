@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useState, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { isMac } from '@/lib/platform'
 import {
+  PanelLeftClose,
+  PanelLeftOpen,
   PanelRightClose,
   PanelRightOpen,
   History,
@@ -20,7 +22,8 @@ import {
   Copy,
   Hammer,
   Map,
-  Check
+  Check,
+  LayoutGrid
 } from 'lucide-react'
 import { KanbanIcon } from '@/components/kanban/KanbanIcon'
 import { Button } from '@/components/ui/button'
@@ -94,11 +97,15 @@ function isConflictFixActiveStatus(status: string | null): boolean {
 export function Header(): React.JSX.Element {
   const { t } = useTranslation()
   const {
+    leftSidebarCollapsed,
     rightSidebarCollapsed,
+    toggleLeftSidebar,
     toggleRightSidebar,
     workspaceView,
     setWorkspaceView,
-    setWorkspaceContentView
+    setWorkspaceContentView,
+    visualizationMode,
+    setVisualizationMode
   } =
     useLayoutStore()
   const { openPanel: openSessionHistory } = useSessionHistoryStore()
@@ -171,6 +178,32 @@ export function Header(): React.JSX.Element {
     s.selectedConnectionId ? s.connections.find((c) => c.id === s.selectedConnectionId) : null
   )
   const isConnectionMode = !!selectedConnectionId && !selectedWorktreeId
+
+  const handleVisualizationModeChange = useCallback(
+    (mode: 'basic' | 'advanced') => {
+      setVisualizationMode(mode)
+      if (mode === 'advanced') return
+
+      if (selectedConnectionId) {
+        setWorkspaceView('connection')
+        setWorkspaceContentView('overview')
+      } else if (selectedProjectId) {
+        setWorkspaceView('project')
+        setWorkspaceContentView(selectedWorktreeId ? 'session' : 'overview')
+      } else {
+        setWorkspaceView('projects')
+        setWorkspaceContentView('overview')
+      }
+    },
+    [
+      selectedConnectionId,
+      selectedProjectId,
+      selectedWorktreeId,
+      setVisualizationMode,
+      setWorkspaceContentView,
+      setWorkspaceView
+    ]
+  )
 
   const hasConflicts = useGitStore(
     (state) =>
@@ -355,6 +388,46 @@ export function Header(): React.JSX.Element {
       {/* Spacer for macOS traffic lights */}
       {isMac() && <div className="w-16 flex-shrink-0" />}
       <div className="flex items-stretch gap-1 flex-1 min-w-0 self-stretch">
+        {visualizationMode === 'advanced' ? (
+          <>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={toggleLeftSidebar}
+              title={leftSidebarCollapsed ? 'Show projects sidebar' : 'Hide projects sidebar'}
+              data-testid="left-sidebar-toggle"
+              className="h-8 w-8 shrink-0 self-center"
+              style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+            >
+              {leftSidebarCollapsed ? (
+                <PanelLeftOpen className="h-4 w-4" />
+              ) : (
+                <PanelLeftClose className="h-4 w-4" />
+              )}
+            </Button>
+            <OctobMark className="h-5 w-5 shrink-0 self-center" />
+            {isConnectionMode && selectedConnection ? (
+              <span className="self-center truncate text-sm font-medium" data-testid="header-connection-info">
+                {selectedConnection.name}
+                <span className="text-primary font-normal">
+                  {' '}({selectedConnection.members.map((member) => member.project_name).join(' + ')})
+                </span>
+              </span>
+            ) : selectedProject ? (
+              <span className="self-center truncate text-sm font-medium" data-testid="header-project-info">
+                {selectedProject.name}
+                {selectedWorktree?.branch_name && selectedWorktree.name !== '(no-worktree)' && (
+                  <span className="text-primary font-normal"> ({selectedWorktree.branch_name})</span>
+                )}
+              </span>
+            ) : (
+              <span className="self-center text-sm font-medium" data-testid="header-brand-fallback">
+                Octob
+              </span>
+            )}
+          </>
+        ) : (
+          <>
         <Button
           variant="ghost"
           size="sm"
@@ -476,6 +549,8 @@ export function Header(): React.JSX.Element {
             </button>
           </div>
         ) : null}
+          </>
+        )}
         {keepAwakeEnabled && (
           <Tooltip>
             <TooltipTrigger asChild>
@@ -561,6 +636,44 @@ export function Header(): React.JSX.Element {
         className="flex items-center gap-2"
         style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
       >
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 gap-1.5 text-xs"
+              title="Choose visualization mode"
+              data-testid="visualization-mode-trigger"
+            >
+              {visualizationMode === 'basic' ? (
+                <LayoutGrid className="h-3.5 w-3.5" />
+              ) : (
+                <PanelLeftOpen className="h-3.5 w-3.5" />
+              )}
+              {visualizationMode === 'basic' ? 'Basic' : 'Advanced'}
+              <ChevronDown className="h-3 w-3" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-64">
+            <DropdownMenuLabel>Visualization mode</DropdownMenuLabel>
+            <DropdownMenuItem onClick={() => handleVisualizationModeChange('basic')}>
+              <LayoutGrid className="mr-2 h-4 w-4" />
+              <div className="flex flex-1 flex-col">
+                <span>Basic</span>
+                <span className="text-xs text-muted-foreground">Project cards and quick overview</span>
+              </div>
+              {visualizationMode === 'basic' && <Check className="ml-2 h-4 w-4" />}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => handleVisualizationModeChange('advanced')}>
+              <PanelLeftOpen className="mr-2 h-4 w-4" />
+              <div className="flex flex-1 flex-col">
+                <span>Advanced</span>
+                <span className="text-xs text-muted-foreground">Classic sidebar and session workflow</span>
+              </div>
+              {visualizationMode === 'advanced' && <Check className="ml-2 h-4 w-4" />}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
         {!isConnectionMode &&
           isGitHub &&
           hasAttachedPR &&

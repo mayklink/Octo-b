@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { createPortal } from 'react-dom'
 import { Header } from './Header'
+import { LeftSidebar } from './LeftSidebar'
 import { MainPane } from './MainPane'
 import { RightSidebar } from './RightSidebar'
 import { Toaster } from '@/components/ui/sonner'
@@ -20,7 +21,7 @@ import { useWorktreeWatcher } from '@/hooks/useWorktreeWatcher'
 import { useConnectionWatcher } from '@/hooks/useConnectionWatcher'
 import { useKeepAwake } from '@/hooks/useKeepAwake'
 import { useAppUpdates } from '@/hooks/useAppUpdates'
-import { ErrorBoundary } from '@/components/error'
+import { ErrorBoundary, ErrorFallback } from '@/components/error'
 import { CreatePRModal } from '@/components/pr/CreatePRModal'
 import { ProjectSettingsDialog } from '@/components/projects/ProjectSettingsDialog'
 import { TerminalPortalProvider, useTerminalPortal } from '@/contexts/TerminalPortalContext'
@@ -119,6 +120,7 @@ interface AppLayoutProps {
 }
 
 export function AppLayout({ children }: AppLayoutProps): React.JSX.Element {
+  const visualizationMode = useLayoutStore((state) => state.visualizationMode)
   const { t } = useTranslation()
   // Register all keyboard shortcuts centrally
   useKeyboardShortcuts()
@@ -253,6 +255,18 @@ export function AppLayout({ children }: AppLayoutProps): React.JSX.Element {
           <Header />
         </ErrorBoundary>
         <div className="flex-1 flex min-h-0" data-testid="layout-content">
+          {visualizationMode === 'advanced' && (
+            <ErrorBoundary
+              componentName="LeftSidebar"
+              fallback={
+                <div className="w-60 border-r bg-muted/50 flex items-center justify-center">
+                  <ErrorFallback compact title="Sidebar Error" />
+                </div>
+              }
+            >
+              <LeftSidebar />
+            </ErrorBoundary>
+          )}
           <ErrorBoundary componentName="MainPane">
             <MainPane>{children}</MainPane>
           </ErrorBoundary>

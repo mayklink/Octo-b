@@ -10,6 +10,7 @@ import {
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { AlertCircle, RefreshCw, Minimize2 } from 'lucide-react'
 import { MessageRenderer } from './MessageRenderer'
+import { ToolActivityGroup } from './AssistantCanvas'
 import { QueuedMessageBubble } from './QueuedMessageBubble'
 import type { OpenCodeMessage } from './SessionView'
 import { formatCompletionDuration } from '@/lib/format-utils'
@@ -21,6 +22,7 @@ import octobMascotIcon from '@/pet/registry/octob/assets/octob.png'
 
 type VirtualItem =
   | { key: string; type: 'message'; message: OpenCodeMessage }
+  | { key: string; type: 'tool-activity-group'; messages: OpenCodeMessage[] }
   | { key: string; type: 'revert-banner' }
   | { key: string; type: 'error-banner' }
   | { key: string; type: 'retry-banner' }
@@ -72,6 +74,17 @@ export interface VirtualizedMessageListViewportAnchor {
 
 export function getVirtualizedMessageListItemKey(item: VirtualItem): string {
   return item.key
+}
+
+function isCollapsibleToolMessage(message: OpenCodeMessage): boolean {
+  if (message.role !== 'assistant' || message.content.trim().length > 0) return false
+  if (!message.parts || message.parts.length === 0) return false
+
+  return message.parts.every((part) => {
+    if (part.type !== 'tool_use' || !part.toolUse) return false
+    const name = part.toolUse.name.toLowerCase()
+    return name !== 'exitplanmode' && name !== 'todowrite'
+  })
 }
 
 function getNearestMeasuredItemForOffset<T extends { start: number; end: number }>(
@@ -228,8 +241,33 @@ export const VirtualizedMessageList = memo(
         const result: VirtualItem[] = []
 
         // Messages
-        for (const msg of messages) {
-          result.push({ key: `message:${msg.id}`, type: 'message' as const, message: msg })
+        for (let messageIndex = 0; messageIndex < messages.length; messageIndex++) {
+          const message = messages[messageIndex]
+
+          if (isCollapsibleToolMessage(message)) {
+            const toolMessages = [message]
+            let nextIndex = messageIndex + 1
+
+            while (
+              nextIndex < messages.length &&
+              isCollapsibleToolMessage(messages[nextIndex])
+            ) {
+              toolMessages.push(messages[nextIndex])
+              nextIndex += 1
+            }
+
+            if (toolMessages.length >= 2) {
+              result.push({
+                key: `tool-activity-group:${toolMessages[0].id}`,
+                type: 'tool-activity-group' as const,
+                messages: toolMessages
+              })
+              messageIndex = nextIndex - 1
+              continue
+            }
+          }
+
+          result.push({ key: `message:${message.id}`, type: 'message' as const, message })
         }
 
         // Revert banner
@@ -424,6 +462,25 @@ export const VirtualizedMessageList = memo(
                 forkDisabled={forkingMessageId !== null && forkingMessageId !== item.message.id}
                 isForking={forkingMessageId === item.message.id}
               />
+            )
+
+          case 'tool-activity-group':
+            return (
+              <div className="px-6 py-3">
+                <ToolActivityGroup
+                  parts={item.messages.flatMap((message) => message.parts ?? [])}
+                  cwd={cwd}
+                  isStreaming={
+                    isStreaming &&
+                    item.messages.some((message) =>
+                      message.parts?.some(
+                        (part) =>
+                          part.toolUse?.status === 'pending' || part.toolUse?.status === 'running'
+                      )
+                    )
+                  }
+                />
+              </div>
             )
 
           case 'revert-banner':
