@@ -8,11 +8,8 @@ files:
   - resources/**/*
 
 publish:
-  provider: github
-  owner: mayklink
-  repo: Octo-b
-  private: true
-  releaseType: release
+  provider: generic
+  url: https://pub-be8ec9b63e674561a210de4fa05a958e.r2.dev
 
 # Native .node binaries cannot be loaded from inside an ASAR archive.
 # This extracts them to app.asar.unpacked/ at build time.
