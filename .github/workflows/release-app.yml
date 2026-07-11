@@ -88,15 +88,106 @@ jobs:
             dist/Octob-Setup-*.exe.blockmap
           if-no-files-found: error
 
+  build-linux:
+    name: Linux release assets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: yarn
+
+      - name: Cache Electron downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/electron
+            ~/.cache/electron-builder
+          key: ${{ runner.os }}-electron-${{ hashFiles('yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-electron-
+
+      - run: yarn install:ci
+      - run: yarn build
+
+      - name: Package Linux release assets
+        run: yarn electron-builder --linux --publish never
+
+      - name: Upload Linux release assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: octob-linux-release-assets
+          path: |
+            dist/*.AppImage
+            dist/*.deb
+            dist/*.tar.gz
+          if-no-files-found: error
+
+  build-macos:
+    name: macOS release assets
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: yarn
+
+      - name: Cache Electron downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Caches/electron
+            ~/Library/Caches/electron-builder
+          key: ${{ runner.os }}-electron-${{ hashFiles('yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-electron-
+
+      - run: yarn install:ci
+      - run: yarn build
+
+      - name: Package unsigned macOS release assets
+        run: yarn electron-builder --mac --publish never -c.mac.notarize=false
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      - name: Upload macOS release assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: octob-macos-release-assets
+          path: |
+            dist/*.dmg
+            dist/*.zip
+          if-no-files-found: error
+
   publish-release:
     name: Publish GitHub Release
     runs-on: ubuntu-latest
-    needs: build-windows
+    needs: [build-windows, build-linux, build-macos]
     steps:
       - name: Download Windows assets
         uses: actions/download-artifact@v4
         with:
           name: octob-windows-release-assets
+          path: release-assets
+
+      - name: Download Linux assets
+        uses: actions/download-artifact@v4
+        with:
+          name: octob-linux-release-assets
+          path: release-assets
+
+      - name: Download macOS assets
+        uses: actions/download-artifact@v4
+        with:
+          name: octob-macos-release-assets
           path: release-assets
 
       - name: Publish release
