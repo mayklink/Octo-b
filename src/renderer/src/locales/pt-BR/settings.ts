@@ -275,6 +275,16 @@ export const settings = {
     resetLog: 'Reiniciar log a cada sessão',
     resetLogHint:
       'Truncar o arquivo de log ao iniciar nova sessão Codex. Desligado: logs são anexados entre sessões.',
+    codexPath: 'Caminho da CLI do Codex',
+    codexPathHint:
+      'Caminho absoluto opcional para o executável do Codex. Tem prioridade sobre a detecção automática pelo PATH.',
+    codexPathPlaceholder: 'ex.: /home/usuario/.asdf/shims/codex',
+    applyCodexPath: 'Aplicar',
+    clearCodexPath: 'Usar automático',
+    codexPathApplied: 'CLI do Codex configurada: {{path}}',
+    codexPathInvalid: 'O executável do Codex é inválido ou não oferece suporte a app-server',
+    codexPathAutoFound: 'Detecção automática do Codex restaurada: {{path}}',
+    codexPathCleared: 'Caminho manual da CLI do Codex removido',
     envVars: 'Variáveis de ambiente',
     envVarsHint:
       'Variáveis injetadas em todas as novas sessões de agente.',

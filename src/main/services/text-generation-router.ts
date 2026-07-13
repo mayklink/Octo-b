@@ -39,6 +39,8 @@ export function setClaudeBinaryPath(path: string | null): void {
 
 export function setCodexBinaryPath(path: string | null): void {
   codexBinaryPath = path
+  cachedSdks = null
+  cacheTimestamp = 0
 }
 
 export function setOpenCodeLaunchSpec(spec: OpenCodeLaunchSpec | null): void {

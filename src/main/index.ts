@@ -44,7 +44,12 @@ import { MistralVibeImplementer } from './services/mistral-vibe-implementer'
 import { CursorCliImplementer } from './services/cursor-cli-implementer'
 import { AgentSdkManager } from './services/agent-sdk-manager'
 import { resolveClaudeBinaryPath } from './services/claude-binary-resolver'
-import { resolveCodexBinaryPath } from './services/codex-binary-resolver'
+import {
+  resolveCodexBinaryPath,
+  resolveConfiguredCodexBinaryPath,
+  setConfiguredCodexBinaryPath,
+  supportsCodexAppServer
+} from './services/codex-binary-resolver'
 import { resolveMistralVibeAcpBinaryPath } from './services/mistral-vibe-binary-resolver'
 import { resolveCursorCliAgentBinaryPath } from './services/cursor-cli-binary-resolver'
 import {
@@ -78,6 +83,7 @@ import { configurePetWindow, destroyPetWindow, getPetWindow } from './services/p
 import { registerUpdateService } from './services/update-service'
 
 const log = createLogger({ component: 'Main' })
+let activeCodexImplementer: CodexImplementer | null = null
 
 // Global error handlers — prevent uncaught errors from crashing the Electron process
 process.on('uncaughtException', (error) => {
@@ -418,6 +424,35 @@ function registerSystemHandlers(openCodeLaunchSpec: OpenCodeLaunchSpec | null): 
     return detectAgentSdks(openCodeLaunchSpec)
   })
 
+  ipcMain.handle('system:configureCodexBinaryPath', (_event, binaryPath: string) => {
+    const requestedPath = typeof binaryPath === 'string' ? binaryPath.trim() : ''
+    setConfiguredCodexBinaryPath(requestedPath || null)
+    const resolvedPath = resolveCodexBinaryPath()
+    const available = !!resolvedPath && supportsCodexAppServer(resolvedPath)
+    const configuredPath = requestedPath
+      ? resolveConfiguredCodexBinaryPath(requestedPath)
+      : null
+    const configuredAvailable =
+      !!configuredPath && supportsCodexAppServer(configuredPath)
+
+    activeCodexImplementer?.setCodexBinaryPath(available ? resolvedPath : null)
+    setRouterCodexBinaryPath(available ? resolvedPath : null)
+
+    return {
+      success: requestedPath ? configuredAvailable : available,
+      path: requestedPath
+        ? configuredAvailable
+          ? configuredPath
+          : null
+        : available
+          ? resolvedPath
+          : null,
+      error: requestedPath ? configuredAvailable : available
+        ? undefined
+        : 'Codex executable was not found or does not support app-server.'
+    }
+  })
+
   // Quit the app (needed for macOS where window.close() doesn't quit)
   ipcMain.handle('system:quitApp', () => {
     app.quit()
@@ -470,6 +505,20 @@ app.whenReady().then(async () => {
   // Must run before any child process spawning (opencode, scripts, Claude Code SDK).
   loadShellEnv()
 
+  // Initialize the database before CLI resolution so a user-selected binary
+  // can be used even when the GUI process cannot see the terminal's PATH.
+  log.info('Initializing database')
+  const database = getDatabase()
+  try {
+    const raw = database.getSetting(APP_SETTINGS_DB_KEY)
+    if (raw) {
+      const settings = JSON.parse(raw) as { customCodexBinaryPath?: string }
+      setConfiguredCodexBinaryPath(settings.customCodexBinaryPath ?? null)
+    }
+  } catch {
+    setConfiguredCodexBinaryPath(null)
+  }
+
   // Resolve system-wide Claude binary (must run after loadShellEnv)
   const claudeBinaryPath = resolveClaudeBinaryPath()
   const codexBinaryPath = resolveCodexBinaryPath()
@@ -494,10 +543,6 @@ app.whenReady().then(async () => {
   // Set app user model id for windows
   electronApp.setAppUserModelId('com.octob')
   ensureDockVisible('startup')
-
-  // Initialize database
-  log.info('Initializing database')
-  getDatabase()
 
   // Initialize telemetry (must come after DB init since it reads/writes settings)
   telemetryService.init()
@@ -623,6 +668,7 @@ app.whenReady().then(async () => {
       setMainWindow: () => {}
     } satisfies AgentSdkImplementer
     const codexImpl = new CodexImplementer()
+    activeCodexImplementer = codexImpl
     codexImpl.setDatabaseService(getDatabase())
     codexImpl.setCodexBinaryPath(codexBinaryPath)
     setRouterCodexBinaryPath(codexBinaryPath)

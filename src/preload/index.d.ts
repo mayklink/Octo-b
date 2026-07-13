@@ -655,6 +655,9 @@ declare global {
         mistralVibe: boolean
         cursorCli: boolean
       }>
+      configureCodexBinaryPath: (
+        binaryPath: string
+      ) => Promise<{ success: boolean; path: string | null; error?: string }>
       quitApp: () => Promise<void>
       openInApp: (appName: string, path: string) => Promise<{ success: boolean; error?: string }>
       openInChrome: (

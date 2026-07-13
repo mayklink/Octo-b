@@ -4,6 +4,7 @@ import { useSettingsStore } from '@/stores/useSettingsStore'
 import { Trash2, Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { toast } from '@/lib/toast'
 
 const POSIX_KEY_REGEX = /^[A-Za-z_][A-Za-z0-9_]*$/
@@ -29,7 +30,9 @@ export function SettingsAdvanced(): React.JSX.Element {
     perfDiagnosticsEnabled,
     codexJsonlLoggingEnabled,
     codexJsonlResetPerSession,
-    updateSetting
+    customCodexBinaryPath,
+    updateSetting,
+    detectAvailableAgentSdks
   } = useSettingsStore()
   const envVars = rawEnvVars ?? []
 
@@ -53,6 +56,28 @@ export function SettingsAdvanced(): React.JSX.Element {
     window.codexDebugLoggerOps.configure(codexJsonlLoggingEnabled, newValue)
     toast.success(
       newValue ? t('settings.advanced.toastLogResetOn') : t('settings.advanced.toastLogResetOff')
+    )
+  }
+
+  const handleApplyCodexPath = async (): Promise<void> => {
+    await updateSetting('customCodexBinaryPath', customCodexBinaryPath)
+    const result = await window.systemOps.configureCodexBinaryPath(customCodexBinaryPath)
+    await detectAvailableAgentSdks()
+    if (result.success) {
+      toast.success(t('settings.advanced.codexPathApplied', { path: result.path }))
+    } else {
+      toast.error(result.error || t('settings.advanced.codexPathInvalid'))
+    }
+  }
+
+  const handleClearCodexPath = async (): Promise<void> => {
+    await updateSetting('customCodexBinaryPath', '')
+    const result = await window.systemOps.configureCodexBinaryPath('')
+    await detectAvailableAgentSdks()
+    toast.success(
+      result.success
+        ? t('settings.advanced.codexPathAutoFound', { path: result.path })
+        : t('settings.advanced.codexPathCleared')
     )
   }
 
@@ -168,6 +193,35 @@ export function SettingsAdvanced(): React.JSX.Element {
             )}
           />
         </button>
+      </div>
+
+      <div className="space-y-2 border-t pt-4">
+        <div>
+          <label className="text-sm font-medium">{t('settings.advanced.codexPath')}</label>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {t('settings.advanced.codexPathHint')}
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Input
+            value={customCodexBinaryPath}
+            onChange={(event) => updateSetting('customCodexBinaryPath', event.target.value)}
+            placeholder={t('settings.advanced.codexPathPlaceholder')}
+            className="font-mono"
+            data-testid="custom-codex-binary-path"
+          />
+          <Button size="sm" onClick={handleApplyCodexPath}>
+            {t('settings.advanced.applyCodexPath')}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleClearCodexPath}
+            disabled={!customCodexBinaryPath}
+          >
+            {t('settings.advanced.clearCodexPath')}
+          </Button>
+        </div>
       </div>
 
       <div className="space-y-3">

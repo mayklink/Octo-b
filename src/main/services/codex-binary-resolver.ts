@@ -1,10 +1,32 @@
 import { execFileSync } from 'child_process'
 import { existsSync } from 'fs'
-import { extname } from 'path'
+import { homedir } from 'os'
+import { extname, resolve } from 'path'
 import { createLogger } from './logger'
 
 const log = createLogger({ component: 'CodexBinaryResolver' })
 const codexAppServerSupportCache = new Map<string, boolean>()
+let configuredCodexBinaryPath: string | null = null
+
+function normalizeConfiguredPath(binaryPath: string): string {
+  const trimmed = binaryPath.trim()
+  const expanded = trimmed === '~' ? homedir() : trimmed.replace(/^~(?=[/\\])/, homedir())
+  return resolve(expanded)
+}
+
+export function resolveConfiguredCodexBinaryPath(binaryPath: string): string | null {
+  const normalizedPath = normalizeConfiguredPath(binaryPath)
+  return existsSync(normalizedPath) ? normalizedPath : null
+}
+
+/**
+ * Set an optional user-selected Codex executable. A valid configured path takes
+ * precedence over PATH discovery; an invalid path falls back to automatic discovery.
+ */
+export function setConfiguredCodexBinaryPath(binaryPath: string | null): void {
+  configuredCodexBinaryPath = binaryPath?.trim() || null
+  codexAppServerSupportCache.clear()
+}
 
 function splitResolvedPaths(result: string): string[] {
   return result
@@ -44,6 +66,17 @@ function usesShellForCodexBinary(binaryPath: string): boolean {
  * binary once and inject it into every child-process spawn site.
  */
 export function resolveCodexBinaryPath(): string | null {
+  if (configuredCodexBinaryPath) {
+    const configuredPath = normalizeConfiguredPath(configuredCodexBinaryPath)
+    if (resolveConfiguredCodexBinaryPath(configuredCodexBinaryPath)) {
+      log.info('Using configured Codex binary', { path: configuredPath })
+      return configuredPath
+    }
+    log.warn('Configured Codex binary does not exist; falling back to PATH', {
+      path: configuredPath
+    })
+  }
+
   const command = process.platform === 'win32' ? 'where' : 'which'
   const binary = 'codex'
 

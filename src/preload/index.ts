@@ -483,6 +483,11 @@ const systemOps = {
     cursorCli: boolean
   }> => ipcRenderer.invoke('system:detectAgentSdks'),
 
+  configureCodexBinaryPath: (
+    binaryPath: string
+  ): Promise<{ success: boolean; path: string | null; error?: string }> =>
+    ipcRenderer.invoke('system:configureCodexBinaryPath', binaryPath),
+
   // Quit the app (needed for macOS where window.close() doesn't quit)
   quitApp: (): Promise<void> => ipcRenderer.invoke('system:quitApp'),
 

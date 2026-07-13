@@ -269,6 +269,16 @@ export const settings = {
     resetLog: 'Reset log each session',
     resetLogHint:
       'Truncate the log file when a new Codex session starts. When off, logs append across sessions.',
+    codexPath: 'Codex CLI path',
+    codexPathHint:
+      'Optional absolute path to the Codex executable. This takes priority over automatic PATH detection.',
+    codexPathPlaceholder: 'e.g., /home/user/.asdf/shims/codex',
+    applyCodexPath: 'Apply',
+    clearCodexPath: 'Use automatic',
+    codexPathApplied: 'Codex CLI configured: {{path}}',
+    codexPathInvalid: 'The selected Codex executable is invalid or does not support app-server',
+    codexPathAutoFound: 'Automatic Codex detection restored: {{path}}',
+    codexPathCleared: 'Manual Codex CLI path cleared',
     envVars: 'Environment Variables',
     envVarsHint:
       'Define custom environment variables that will be injected into all new agent sessions.',

@@ -128,6 +128,7 @@ export interface AppSettings {
 
   // Agent SDK
   defaultAgentSdk: AgentSdk
+  customCodexBinaryPath: string
 
   // Setup
   initialSetupComplete: boolean
@@ -212,6 +213,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   usageIndicatorMode: 'current-agent',
   usageIndicatorProviders: [],
   defaultAgentSdk: 'opencode',
+  customCodexBinaryPath: '',
   stripAtMentions: true,
   codexFastMode: false,
   codexFastModeAccepted: false,
@@ -461,6 +463,10 @@ async function loadSettingsFromDatabase(): Promise<AppSettings | null> {
           result.uiLocale = DEFAULT_SETTINGS.uiLocale
         }
 
+        if (typeof result.customCodexBinaryPath !== 'string') {
+          result.customCodexBinaryPath = ''
+        }
+
         if (
           typeof result.lastTaskSessionPromptTemplateId === 'string' &&
           result.lastTaskSessionPromptTemplateId.length > 0 &&
@@ -518,6 +524,7 @@ function extractSettings(state: SettingsState): AppSettings {
     usageIndicatorMode: state.usageIndicatorMode,
     usageIndicatorProviders: state.usageIndicatorProviders,
     defaultAgentSdk: state.defaultAgentSdk,
+    customCodexBinaryPath: state.customCodexBinaryPath,
     stripAtMentions: state.stripAtMentions,
     codexFastMode: state.codexFastMode,
     codexFastModeAccepted: state.codexFastModeAccepted,
@@ -734,6 +741,9 @@ export const useSettingsStore = create<SettingsState>()(
       resetToDefaults: () => {
         set({ ...DEFAULT_SETTINGS })
         saveToDatabase(DEFAULT_SETTINGS)
+        window.systemOps?.configureCodexBinaryPath('').then(() => {
+          get().detectAvailableAgentSdks()
+        }).catch(() => {})
         window.petOps?.updateSettings(DEFAULT_SETTINGS.pet)
         window.petOps?.hide().catch(() => {})
       },
@@ -804,6 +814,7 @@ export const useSettingsStore = create<SettingsState>()(
         usageIndicatorMode: state.usageIndicatorMode,
         usageIndicatorProviders: state.usageIndicatorProviders,
         defaultAgentSdk: state.defaultAgentSdk,
+        customCodexBinaryPath: state.customCodexBinaryPath,
         activeSection: state.activeSection,
         stripAtMentions: state.stripAtMentions,
         codexFastMode: state.codexFastMode,
