@@ -23,7 +23,11 @@ import {
   Hammer,
   Map,
   Check,
-  LayoutGrid
+  LayoutGrid,
+  MessageSquare,
+  Code2,
+  GitBranch,
+  MoreHorizontal
 } from 'lucide-react'
 import { KanbanIcon } from '@/components/kanban/KanbanIcon'
 import { Button } from '@/components/ui/button'
@@ -99,11 +103,16 @@ export function Header(): React.JSX.Element {
   const {
     leftSidebarCollapsed,
     rightSidebarCollapsed,
+    rightSidebarTab,
+    workspaceMode,
     toggleLeftSidebar,
     toggleRightSidebar,
     workspaceView,
     setWorkspaceView,
     setWorkspaceContentView,
+    setRightSidebarCollapsed,
+    setRightSidebarTab,
+    setWorkspaceMode,
     visualizationMode,
     setVisualizationMode
   } =
@@ -147,7 +156,6 @@ export function Header(): React.JSX.Element {
   const isBoardViewActive = useKanbanStore((s) => s.isBoardViewActive)
   const toggleBoardView = useKanbanStore((s) => s.toggleBoardView)
   const kanbanIconSeen = useTipStore((s) => s.isTipSeen('kanban-icon'))
-  const nonDefaultProviderChosen = useTipStore((s) => s.nonDefaultProviderChosen)
   const [conflictFixFlow, setConflictFixFlow] = useState<ConflictFixFlow | null>(null)
 
   // Track first-time kanban exit for the kanban-reenter tip
@@ -379,9 +387,33 @@ export function Header(): React.JSX.Element {
 
   const showFixConflictsButton = hasConflicts || isFixConflictsLoading
 
+  const activeWorkspaceMode = isBoardViewActive ? 'board' : workspaceMode
+
+  const selectWorkspaceMode = (mode: 'chat' | 'code' | 'git' | 'board'): void => {
+    setWorkspaceMode(mode)
+    if (mode === 'board') {
+      useFileViewerStore.getState().clearActiveViews()
+      if (!isBoardViewActive) toggleBoardView()
+      setRightSidebarCollapsed(true)
+      return
+    }
+
+    if (isBoardViewActive) toggleBoardView()
+    if (mode === 'chat') {
+      useFileViewerStore.getState().clearActiveViews()
+      setRightSidebarCollapsed(true)
+      return
+    }
+
+    // Code and Git own the main canvas. The sidebar remains reserved for
+    // optional contextual information opened explicitly by the user.
+    setRightSidebarTab(mode === 'git' ? 'changes' : 'files')
+    setRightSidebarCollapsed(true)
+  }
+
   return (
     <header
-      className="h-12 border-b bg-background flex items-center justify-between px-4 flex-shrink-0 select-none"
+      className="h-13 border-b bg-background/95 backdrop-blur flex items-center justify-between px-3 flex-shrink-0 select-none"
       style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
       data-testid="header"
     >
@@ -632,6 +664,36 @@ export function Header(): React.JSX.Element {
         </div>
       )}
       <div className="flex-1" />
+      {visualizationMode === 'advanced' && selectedWorktree && (
+        <nav
+          className="mr-2 flex items-center gap-0.5 rounded-lg border bg-muted/35 p-0.5"
+          aria-label="Workspace mode"
+          style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+        >
+          {([
+            ['chat', MessageSquare, 'Chat'],
+            ['code', Code2, 'Code'],
+            ['git', GitBranch, 'Git'],
+            ['board', KanbanIcon, 'Board']
+          ] as const).map(([mode, Icon, label]) => (
+            <button
+              key={mode}
+              type="button"
+              onClick={() => selectWorkspaceMode(mode)}
+              className={cn(
+                'flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors',
+                activeWorkspaceMode === mode
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              )}
+              aria-current={activeWorkspaceMode === mode ? 'page' : undefined}
+            >
+              <Icon className="h-3.5 w-3.5" />
+              <span className="hidden xl:inline">{label}</span>
+            </button>
+          ))}
+        </nav>
+      )}
       <div
         className="flex items-center gap-2"
         style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
@@ -1161,7 +1223,7 @@ export function Header(): React.JSX.Element {
             </Popover>
           </Popover>
         )}
-        {boardMode === 'toggle' && (
+        {boardMode === 'toggle' && visualizationMode !== 'advanced' && (
           <Tip
             tipId={kanbanIconSeen ? 'kanban-reenter' : 'kanban-icon'}
             enabled={kanbanIconSeen ? justExitedKanban : hasProjects}
@@ -1190,37 +1252,36 @@ export function Header(): React.JSX.Element {
             </Button>
           </Tip>
         )}
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={openSessionHistory}
-          title="Session History (⌘K)"
-          data-testid="session-history-toggle"
-        >
-          <History className="h-4 w-4" />
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => openSettings('mcp')}
-          title="MCP servers"
-          data-testid="mcp-settings-toggle"
-          className="h-8 gap-1.5 px-2 text-xs"
-        >
-          <Server className="h-3.5 w-3.5" />
-          MCP
-        </Button>
-        <Tip tipId="settings-default-provider" enabled={nonDefaultProviderChosen}>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => openSettings()}
-            title="Settings (⌘,)"
-            data-testid="settings-toggle"
-          >
-            <Settings className="h-4 w-4" />
-          </Button>
-        </Tip>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              title="More actions"
+              data-testid="header-more-actions"
+              className="h-8 w-8"
+            >
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-52">
+            <DropdownMenuItem onClick={openSessionHistory} data-testid="session-history-toggle">
+              <History className="mr-2 h-4 w-4" />
+              Session history
+              <span className="ml-auto text-[10px] text-muted-foreground">⌘K</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => openSettings('mcp')} data-testid="mcp-settings-toggle">
+              <Server className="mr-2 h-4 w-4" />
+              MCP servers
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => openSettings()} data-testid="settings-toggle">
+              <Settings className="mr-2 h-4 w-4" />
+              Settings
+              <span className="ml-auto text-[10px] text-muted-foreground">⌘,</span>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
         <Button
           onClick={toggleRightSidebar}
           variant="ghost"

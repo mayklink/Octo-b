@@ -4,7 +4,7 @@ import { useLayoutStore } from '@/stores/useLayoutStore'
 import { useProjectStore, useConnectionStore, useFilterStore, useSpaceStore } from '@/stores'
 import { useSettingsStore } from '@/stores/useSettingsStore'
 import { ResizeHandle } from './ResizeHandle'
-import { FolderGit2, Link, Loader2 } from 'lucide-react'
+import { ChevronRight, FolderGit2, Link, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   ProjectList,
@@ -31,6 +31,7 @@ export function LeftSidebar(): React.JSX.Element {
     usageIndicatorMode === 'current-agent' ||
     (usageIndicatorMode === 'specific-providers' && usageIndicatorProviders.length > 0)
   const [filterQuery, setFilterQuery] = useState('')
+  const [connectionsExpanded, setConnectionsExpanded] = useState(false)
 
   // Filter store for language filters
   const activeLanguages = useFilterStore((s) => s.activeLanguages)
@@ -160,12 +161,12 @@ export function LeftSidebar(): React.JSX.Element {
             </div>
           </div>
         ) : (
-          <div className="p-3 border-b flex items-center justify-between">
+          <div className="px-3 py-2.5 border-b flex items-center justify-between">
             <div className="flex items-center gap-2 text-sm font-medium">
               <FolderGit2 className="h-4 w-4" />
               <span>{t('common.projects')}</span>
             </div>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-0.5">
               <RecentToggleButton />
               <ExpandProjectsButton />
               <SortProjectsButton />
@@ -174,7 +175,7 @@ export function LeftSidebar(): React.JSX.Element {
           </div>
         )}
         {projectCount > 1 && (
-          <div className="px-3 py-2 border-b">
+          <div className="px-2.5 py-2 border-b">
             <ProjectFilter value={filterQuery} onChange={setFilterQuery} />
           </div>
         )}
@@ -183,10 +184,19 @@ export function LeftSidebar(): React.JSX.Element {
             <FilterChips languages={activeLanguages} onRemove={removeLanguage} />
           </div>
         )}
-        <div className="flex-1 overflow-auto p-2" data-testid="sidebar-scroll-container">
+        <div className="flex-1 overflow-auto px-1.5 py-2" data-testid="sidebar-scroll-container">
           <PinnedList />
           <RecentList />
-          <ConnectionList />
+          <button
+            type="button"
+            onClick={() => setConnectionsExpanded((expanded) => !expanded)}
+            className="mb-1 flex h-7 w-full items-center gap-1.5 rounded-md px-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+            aria-expanded={connectionsExpanded}
+          >
+            <ChevronRight className={`h-3 w-3 transition-transform ${connectionsExpanded ? 'rotate-90' : ''}`} />
+            {t('common.connections')}
+          </button>
+          {connectionsExpanded && <ConnectionList />}
           <ProjectList
             onAddProject={handleAddProject}
             filterQuery={filterQuery}

@@ -72,17 +72,28 @@ function isCollapsibleActivityPart(part: StreamingPart): boolean {
 }
 
 function toolActivityLabel(parts: StreamingPart[]): string {
-  const counts = new Map<string, number>()
+  const categories = {
+    commands: 0,
+    changes: 0,
+    inspected: 0,
+    other: 0
+  }
 
   for (const part of parts) {
     if (!part.toolUse) continue
-    const name = part.toolUse.name
-    counts.set(name, (counts.get(name) ?? 0) + 1)
+    const name = part.toolUse.name.toLowerCase()
+    if (/(bash|shell|command|terminal|exec)/.test(name)) categories.commands += 1
+    else if (/(edit|write|patch|create|delete|move)/.test(name)) categories.changes += 1
+    else if (/(read|search|find|list|glob|grep|inspect)/.test(name)) categories.inspected += 1
+    else categories.other += 1
   }
 
-  const labels = [...counts.entries()].map(([name, count]) => (count > 1 ? `${name} ×${count}` : name))
-  if (labels.length <= 3) return labels.join(', ')
-  return `${labels.slice(0, 3).join(', ')} +${labels.length - 3}`
+  const labels: string[] = []
+  if (categories.changes) labels.push(`${categories.changes} file ${categories.changes === 1 ? 'change' : 'changes'}`)
+  if (categories.commands) labels.push(`${categories.commands} ${categories.commands === 1 ? 'command' : 'commands'}`)
+  if (categories.inspected) labels.push(`${categories.inspected} ${categories.inspected === 1 ? 'inspection' : 'inspections'}`)
+  if (categories.other) labels.push(`${categories.other} other ${categories.other === 1 ? 'action' : 'actions'}`)
+  return labels.join(' · ')
 }
 
 export function ToolActivityGroup({
@@ -131,7 +142,7 @@ export function ToolActivityGroup({
           )}
         />
         <span className="shrink-0 font-medium text-foreground">
-          {tools.length} technical {tools.length === 1 ? 'action' : 'actions'}
+          {isStreaming ? 'Working' : 'Activity summary'}
         </span>
         <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-muted-foreground">
           {summary}
@@ -215,7 +226,9 @@ function renderParts(
           activityIndex += 1
         }
 
-        if (activityParts.length >= 2) {
+        // Technical activity is supporting context, even when there is only one
+        // command. Keep it summarized by default and reveal details on demand.
+        if (activityParts.length >= 1) {
           const firstToolId = activityParts[0].toolUse?.id ?? index
           renderedParts.push(
             <ToolActivityGroup

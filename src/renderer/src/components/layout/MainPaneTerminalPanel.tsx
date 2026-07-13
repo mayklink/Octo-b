@@ -48,7 +48,7 @@ export function MainPaneTerminalPanel(): React.JSX.Element {
   const computedHeight = expanded ? Math.round(parentHeight * heightFraction) : 0
 
   return (
-    <div ref={panelRef} className="flex flex-col flex-shrink-0 border-t border-border">
+    <div ref={panelRef} className="flex flex-col flex-shrink-0 border-t border-border bg-background/95">
       {/* Resize handle - only when expanded */}
       {expanded && <ResizeHandle direction="down" onResize={handleResize} />}
 
@@ -56,14 +56,15 @@ export function MainPaneTerminalPanel(): React.JSX.Element {
       <button
         onClick={toggle}
         className={cn(
-          'h-[30px] flex items-center gap-2 px-3 text-xs transition-colors',
+          'h-7 flex items-center gap-2 px-3 text-[11px] transition-colors',
           'text-muted-foreground hover:text-foreground hover:bg-accent/50',
           expanded && 'border-b border-border'
         )}
         data-testid="bottom-terminal-toggle"
       >
         <Terminal className="h-3.5 w-3.5" />
-        <span>Terminal</span>
+        <span className="font-medium">Terminal & logs</span>
+        {!expanded && <span className="text-muted-foreground/60">collapsed</span>}
         <span className="flex-1" />
         {expanded ? (
           <ChevronDown className="h-3.5 w-3.5" />

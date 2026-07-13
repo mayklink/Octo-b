@@ -3,6 +3,7 @@ export const common = {
   connect: 'Connect',
   connecting: 'Connecting...',
   projects: 'Projects',
+  connections: 'Connections',
   selectWorktrees: 'Select worktrees',
   optional: '(optional)',
   newWorkspaceQuick: 'Quick new workspace',

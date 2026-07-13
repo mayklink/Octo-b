@@ -21,6 +21,7 @@ import { PRNotificationStack } from '@/components/pr/PRNotificationStack'
 import { MainPaneTerminalPanel } from './MainPaneTerminalPanel'
 import { SettingsView } from '@/components/settings'
 import { ProjectDashboard } from '@/components/projects/ProjectDashboard'
+import { WorkspaceFocusView } from './WorkspaceFocusView'
 
 const SESSION_TERMINAL_VIEW_IDLE_UNMOUNT_MS = 60_000
 const MAX_MOUNTED_SESSION_TERMINAL_VIEWS = 2
@@ -49,6 +50,7 @@ export function MainPane({ children }: MainPaneProps): React.JSX.Element {
   const workspaceView = useLayoutStore((state) => state.workspaceView)
   const workspaceContentView = useLayoutStore((state) => state.workspaceContentView)
   const visualizationMode = useLayoutStore((state) => state.visualizationMode)
+  const workspaceMode = useLayoutStore((state) => state.workspaceMode)
   const activePinnedSessionId = useSessionStore((state) => state.activePinnedSessionId)
   const activeBoardAssistantProjectId = useSessionStore((state) => state.activeBoardAssistantProjectId)
   const isBoardViewActive = useKanbanStore((state) => state.isBoardViewActive)
@@ -61,6 +63,14 @@ export function MainPane({ children }: MainPaneProps): React.JSX.Element {
   const selectedProjectPath = useProjectStore((state) =>
     state.projects.find((p) => p.id === state.selectedProjectId)?.path ?? ''
   )
+  const selectedWorktreePath = useMemo(() => {
+    if (!selectedWorktreeId) return null
+    for (const worktrees of useWorktreeStore.getState().worktreesByProject.values()) {
+      const worktree = worktrees.find((item) => item.id === selectedWorktreeId)
+      if (worktree) return worktree.path
+    }
+    return null
+  }, [selectedWorktreeId])
 
   // Subscribe to session maps so terminal list stays reactive
   const sessionsByWorktree = useSessionStore((state) => state.sessionsByWorktree)
@@ -309,6 +319,24 @@ export function MainPane({ children }: MainPaneProps): React.JSX.Element {
             <p className="text-sm">Select a project to view its board</p>
           </div>
         </div>
+      )
+    }
+
+    if (
+      visualizationMode === 'advanced' &&
+      selectedWorktreeId &&
+      selectedWorktreePath &&
+      (workspaceMode === 'code' || workspaceMode === 'git') &&
+      !activeFilePath &&
+      !activeDiff &&
+      !contextEditorWorktreeId
+    ) {
+      return (
+        <WorkspaceFocusView
+          mode={workspaceMode}
+          worktreeId={selectedWorktreeId}
+          worktreePath={selectedWorktreePath}
+        />
       )
     }
 
