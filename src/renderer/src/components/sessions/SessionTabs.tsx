@@ -903,8 +903,19 @@ export function SessionTabs(): React.JSX.Element | null {
     }
   }
 
-  // Handle clicking a session tab - deactivate file tab and clear unread status
+  const activateChatWorkspace = () => {
+    const layoutStore = useLayoutStore.getState()
+    layoutStore.setWorkspaceMode('chat')
+    layoutStore.setWorkspaceContentView('session')
+    layoutStore.setRightSidebarCollapsed(true)
+    useKanbanStore.setState({ isBoardViewActive: false, isPinnedBoardActive: false })
+  }
+
+  // Handle clicking a session tab - always return to chat, deactivate file tab,
+  // and clear unread status.
   const handleSessionTabClick = (sessionId: string) => {
+    activateChatWorkspace()
+
     const isAlreadyPresentedSession =
       activeSessionId === sessionId && activeFilePath === null && !inlineConnectionSessionId
 
@@ -914,7 +925,6 @@ export function SessionTabs(): React.JSX.Element | null {
 
     setActiveFile(null)
     clearInlineConnectionSession()
-    useLayoutStore.getState().setWorkspaceContentView('session')
     if (isConnectionMode) {
       setActiveConnectionSession(sessionId)
     } else {
@@ -925,6 +935,8 @@ export function SessionTabs(): React.JSX.Element | null {
 
   // Handle clicking a sticky connection session tab (inline viewing in worktree mode)
   const handleConnectionSessionTabClick = (sessionId: string) => {
+    activateChatWorkspace()
+
     const isAlreadyPresentedConnectionSession =
       inlineConnectionSessionId === sessionId && activeFilePath === null
 
@@ -933,7 +945,6 @@ export function SessionTabs(): React.JSX.Element | null {
     }
 
     setActiveFile(null)
-    useLayoutStore.getState().setWorkspaceContentView('session')
     setInlineConnectionSession(sessionId)
     useWorktreeStatusStore.getState().clearSessionStatus(sessionId)
   }
@@ -1418,10 +1429,13 @@ export function SessionTabs(): React.JSX.Element | null {
 
         {/* File viewer tabs — always rendered, shared across both modes */}
         {fileTabs.map((file) => {
-          const worktreePath = selectedWorktree?.path || ''
+          const workspacePath =
+            selectedWorktree?.path ||
+            connections.find((connection) => connection.id === selectedConnectionId)?.path ||
+            ''
           const relativePath =
-            worktreePath && file.path.startsWith(worktreePath)
-              ? file.path.slice(worktreePath.length + 1)
+            workspacePath && file.path.startsWith(workspacePath)
+              ? file.path.slice(workspacePath.length + 1)
               : file.name
           return (
             <FileTab

@@ -39,6 +39,11 @@ interface MainPaneProps {
 export function MainPane({ children }: MainPaneProps): React.JSX.Element {
   const selectedWorktreeId = useWorktreeStore((state) => state.selectedWorktreeId)
   const selectedConnectionId = useConnectionStore((state) => state.selectedConnectionId)
+  const selectedConnectionPath = useConnectionStore((state) =>
+    state.selectedConnectionId
+      ? state.connections.find((connection) => connection.id === state.selectedConnectionId)?.path ?? null
+      : null
+  )
   const activeSessionId = useSessionStore((state) => state.activeSessionId)
   const isLoading = useSessionStore((state) => state.isLoading)
   const inlineConnectionSessionId = useSessionStore((state) => state.inlineConnectionSessionId)
@@ -264,6 +269,27 @@ export function MainPane({ children }: MainPaneProps): React.JSX.Element {
       return <ProjectDashboard />
     }
 
+    // Code and Git explicitly own the main canvas. Keep this before every board
+    // branch so a sticky/persisted Board tab cannot cover the selected workspace mode.
+    if (
+      visualizationMode === 'advanced' &&
+      ((selectedWorktreeId &&
+        selectedWorktreePath &&
+        (workspaceMode === 'code' || workspaceMode === 'git')) ||
+        (selectedConnectionId && selectedConnectionPath && workspaceMode === 'code')) &&
+      !activeFilePath &&
+      !activeDiff &&
+      !contextEditorWorktreeId
+    ) {
+      return (
+        <WorkspaceFocusView
+          mode={workspaceMode}
+          worktreeId={selectedWorktreeId ?? selectedConnectionId!}
+          worktreePath={selectedWorktreePath ?? selectedConnectionPath!}
+        />
+      )
+    }
+
     // Sticky-tab board mode: render board when BOARD_TAB_ID is the active session
     if (boardMode === 'sticky-tab' && activeSessionId === BOARD_TAB_ID && !inlineConnectionSessionId && !activeFilePath && !activeDiff && !contextEditorWorktreeId) {
       // Pinned board takes priority when active
@@ -319,24 +345,6 @@ export function MainPane({ children }: MainPaneProps): React.JSX.Element {
             <p className="text-sm">Select a project to view its board</p>
           </div>
         </div>
-      )
-    }
-
-    if (
-      visualizationMode === 'advanced' &&
-      selectedWorktreeId &&
-      selectedWorktreePath &&
-      (workspaceMode === 'code' || workspaceMode === 'git') &&
-      !activeFilePath &&
-      !activeDiff &&
-      !contextEditorWorktreeId
-    ) {
-      return (
-        <WorkspaceFocusView
-          mode={workspaceMode}
-          worktreeId={selectedWorktreeId}
-          worktreePath={selectedWorktreePath}
-        />
       )
     }
 

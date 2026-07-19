@@ -2,7 +2,6 @@ import { Code2, GitBranch } from 'lucide-react'
 import { FileTree } from '@/components/file-tree/FileTree'
 import { ChangesView } from '@/components/file-tree/ChangesView'
 import { useFileViewerStore } from '@/stores/useFileViewerStore'
-import { useWorktreeStore } from '@/stores/useWorktreeStore'
 import type { WorkspaceMode } from '@/stores/useLayoutStore'
 
 interface WorkspaceFocusViewProps {
@@ -53,7 +52,6 @@ export function WorkspaceFocusView({
           worktreePath={worktreePath}
           onClose={() => undefined}
           onFileClick={handleFileClick}
-          hideGitIndicators
           hideGitContextActions
         />
       </div>

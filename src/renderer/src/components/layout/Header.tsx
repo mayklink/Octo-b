@@ -389,6 +389,22 @@ export function Header(): React.JSX.Element {
 
   const activeWorkspaceMode = isBoardViewActive ? 'board' : workspaceMode
 
+  // A connection is a valid workspace too. It can browse the combined directory,
+  // chat in connection-scoped sessions, and show its board. Git stays worktree-only
+  // because a connection can contain multiple repositories.
+  const workspaceModes = [
+    ['chat', MessageSquare, 'Chat'],
+    ['code', Code2, 'Code'],
+    ['git', GitBranch, 'Git'],
+    ['board', KanbanIcon, 'Board']
+  ] as const
+
+  useEffect(() => {
+    if (isConnectionMode && workspaceMode === 'git') {
+      setWorkspaceMode('chat')
+    }
+  }, [isConnectionMode, workspaceMode, setWorkspaceMode])
+
   const selectWorkspaceMode = (mode: 'chat' | 'code' | 'git' | 'board'): void => {
     setWorkspaceMode(mode)
     if (mode === 'board') {
@@ -407,6 +423,7 @@ export function Header(): React.JSX.Element {
 
     // Code and Git own the main canvas. The sidebar remains reserved for
     // optional contextual information opened explicitly by the user.
+    useFileViewerStore.getState().clearActiveViews()
     setRightSidebarTab(mode === 'git' ? 'changes' : 'files')
     setRightSidebarCollapsed(true)
   }
@@ -664,34 +681,36 @@ export function Header(): React.JSX.Element {
         </div>
       )}
       <div className="flex-1" />
-      {visualizationMode === 'advanced' && selectedWorktree && (
+      {visualizationMode === 'advanced' && (selectedWorktree || selectedConnection) && (
         <nav
           className="mr-2 flex items-center gap-0.5 rounded-lg border bg-muted/35 p-0.5"
           aria-label="Workspace mode"
           style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
         >
-          {([
-            ['chat', MessageSquare, 'Chat'],
-            ['code', Code2, 'Code'],
-            ['git', GitBranch, 'Git'],
-            ['board', KanbanIcon, 'Board']
-          ] as const).map(([mode, Icon, label]) => (
-            <button
-              key={mode}
-              type="button"
-              onClick={() => selectWorkspaceMode(mode)}
-              className={cn(
-                'flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors',
-                activeWorkspaceMode === mode
-                  ? 'bg-background text-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground'
-              )}
-              aria-current={activeWorkspaceMode === mode ? 'page' : undefined}
-            >
-              <Icon className="h-3.5 w-3.5" />
-              <span className="hidden xl:inline">{label}</span>
-            </button>
-          ))}
+          {workspaceModes.map(([mode, Icon, label]) => {
+            const disabled = isConnectionMode && mode === 'git'
+            return (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => selectWorkspaceMode(mode)}
+                disabled={disabled}
+                title={disabled ? 'Select an individual worktree to use Git' : undefined}
+                className={cn(
+                  'flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors',
+                  disabled
+                    ? 'cursor-not-allowed text-muted-foreground/40'
+                    : activeWorkspaceMode === mode
+                      ? 'bg-background text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                )}
+                aria-current={activeWorkspaceMode === mode ? 'page' : undefined}
+              >
+                <Icon className="h-3.5 w-3.5" />
+                <span className="hidden xl:inline">{label}</span>
+              </button>
+            )
+          })}
         </nav>
       )}
       <div

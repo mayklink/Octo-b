@@ -230,7 +230,7 @@ export function WorktreeList({ project }: WorktreeListProps): React.JSX.Element 
   }, [selectedWorktrees, isBulkDeleting])
 
   return (
-    <div className="pl-4" data-testid={`worktree-list-${project.id}`}>
+    <div className="mt-1" data-testid={`worktree-list-${project.id}`}>
       {selectableWorktrees.length > 1 && (
         <div
           className={cn(
