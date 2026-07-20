@@ -50,7 +50,7 @@ function parseAzureRemote(
     }
   }
   const visualStudio = remoteUrl.match(
-    /([^/.]+)\.visualstudio\.com\/([^/]+)\/_git\/([^/?#]+)/i
+    /([^/.]+)\.visualstudio\.com\/(?:DefaultCollection\/)?([^/]+)\/_git\/([^/?#]+)/i
   )
   if (visualStudio) {
     return {
