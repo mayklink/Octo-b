@@ -5,6 +5,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { cn } from '@/lib/utils'
 import claudeIcon from '@/assets/model-icons/claude.svg'
 import openaiIcon from '@/assets/model-icons/openai.svg'
+import antigravityIcon from '@/assets/model-icons/antigravity.svg'
 import type { UsageProvider } from '@shared/types/usage'
 
 function getBarColor(percent: number): string {
@@ -91,7 +92,7 @@ function findSessionById(
   return null
 }
 
-const PROVIDER_ORDER: UsageProvider[] = ['anthropic', 'openai']
+const PROVIDER_ORDER: UsageProvider[] = ['anthropic', 'openai', 'google']
 
 function getVisibleProviders(
   mode: 'current-agent' | 'specific-providers',
@@ -114,18 +115,19 @@ function ProviderUsageBlock({
 }): React.JSX.Element | null {
   const anthropicUsage = useUsageStore((s) => s.anthropicUsage)
   const openaiUsage = useUsageStore((s) => s.openaiUsage)
+  const googleUsage = useUsageStore((s) => s.googleUsage)
   const forceRefreshProvider = useUsageStore((s) => s.forceRefreshProvider)
   const isLoading = useUsageStore((s) =>
-    provider === 'anthropic' ? s.anthropicIsLoading : s.openaiIsLoading
+    provider === 'anthropic' ? s.anthropicIsLoading : provider === 'openai' ? s.openaiIsLoading : s.googleIsLoading
   )
   const email = useAccountStore((s) => provider === 'anthropic' ? s.anthropicEmail : s.openaiEmail)
   const fetchEmail = useAccountStore((s) => s.fetchEmail)
 
-  const usage = normalizeUsage(provider, anthropicUsage, openaiUsage)
+  const usage = normalizeUsage(provider, anthropicUsage, openaiUsage, googleUsage)
 
-  const providerIcon = provider === 'anthropic' ? claudeIcon : openaiIcon
-  const providerLabel = provider === 'anthropic' ? 'Claude' : 'OpenAI'
-  const tooltipTitle = provider === 'anthropic' ? 'Claude API Usage' : 'OpenAI API Usage'
+  const providerIcon = provider === 'anthropic' ? claudeIcon : provider === 'openai' ? openaiIcon : antigravityIcon
+  const providerLabel = provider === 'anthropic' ? 'Claude' : provider === 'openai' ? 'OpenAI' : 'Antigravity'
+  const tooltipTitle = provider === 'anthropic' ? 'Claude API Usage' : provider === 'openai' ? 'OpenAI API Usage' : 'Antigravity Quota Usage'
 
   // No credentials state — show muted N/A bars when explicitly selected
   if (!usage) {

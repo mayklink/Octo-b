@@ -9,6 +9,7 @@ import { toast } from '@/lib/toast'
 import type { UsageProvider } from '@shared/types/usage'
 import claudeIcon from '@/assets/model-icons/claude.svg'
 import openaiIcon from '@/assets/model-icons/openai.svg'
+import antigravityIcon from '@/assets/model-icons/antigravity.svg'
 import { isAgentSdkAvailable } from '@/lib/agent-sdk-availability'
 import {
   ONBOARDING_TOUR_SETTING_KEY,
@@ -67,6 +68,7 @@ export function SettingsGeneral(): React.JSX.Element {
   const codexAvailable = isAgentSdkAvailable('codex', availableAgentSdks)
   const mistralVibeAvailable = isAgentSdkAvailable('mistral-vibe', availableAgentSdks)
   const cursorCliAvailable = isAgentSdkAvailable('cursor-cli', availableAgentSdks)
+  const antigravityAvailable = isAgentSdkAvailable('antigravity', availableAgentSdks)
 
   return (
     <div className="space-y-6">
@@ -480,6 +482,21 @@ export function SettingsGeneral(): React.JSX.Element {
               <img src={openaiIcon} alt="OpenAI" className="h-3.5 w-3.5" />
               OpenAI
             </button>
+            <button
+              role="checkbox"
+              aria-checked={usageIndicatorProviders.includes('google')}
+              onClick={() => toggleProvider('google')}
+              className={cn(
+                'flex items-center gap-2 px-3 py-1.5 rounded-md text-sm border transition-colors w-full',
+                usageIndicatorProviders.includes('google')
+                  ? 'bg-primary text-primary-foreground border-primary'
+                  : 'bg-muted/50 text-muted-foreground border-border hover:bg-accent/50'
+              )}
+              data-testid="usage-provider-google"
+            >
+              <img src={antigravityIcon} alt="Antigravity" className="h-3.5 w-3.5" />
+              Antigravity
+            </button>
             {usageIndicatorProviders.length === 0 && (
               <p className="text-xs text-muted-foreground/70 italic">
                 {t('settings.general.usageProviderPick')}
@@ -573,6 +590,29 @@ export function SettingsGeneral(): React.JSX.Element {
             Cursor CLI
           </button>
           <button
+            onClick={() => updateSetting('defaultAgentSdk', 'antigravity')}
+            disabled={!antigravityAvailable}
+            className={cn(
+              'px-3 py-1.5 rounded-md text-sm border transition-colors disabled:opacity-50 disabled:cursor-not-allowed',
+              defaultAgentSdk === 'antigravity'
+                ? 'bg-primary text-primary-foreground border-primary'
+                : 'bg-muted/50 text-muted-foreground border-border hover:bg-accent/50'
+            )}
+            data-testid="agent-sdk-antigravity"
+            title={
+              !antigravityAvailable
+                ? 'Install Google Antigravity CLI (`agy`) and restart Octob.'
+                : availableAgentSdks?.antigravityVersion
+                  ? `Antigravity CLI v${availableAgentSdks.antigravityVersion}`
+                  : undefined
+            }
+          >
+            Antigravity
+            {availableAgentSdks?.antigravityVersion && (
+              <span className="ml-1 opacity-60">v{availableAgentSdks.antigravityVersion}</span>
+            )}
+          </button>
+          <button
             onClick={() => updateSetting('defaultAgentSdk', 'terminal')}
             className={cn(
               'px-3 py-1.5 rounded-md text-sm border transition-colors',
@@ -590,7 +630,8 @@ export function SettingsGeneral(): React.JSX.Element {
             !claudeAvailable ||
             !codexAvailable ||
             !mistralVibeAvailable ||
-            !cursorCliAvailable) && (
+            !cursorCliAvailable ||
+            !antigravityAvailable) && (
           <p className="text-xs text-muted-foreground/70 italic">
             {t('settings.general.providersDisabledHint')}
           </p>

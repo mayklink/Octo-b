@@ -13,6 +13,7 @@ export const useAccountStore = create<AccountState>()((set) => ({
   fetchEmail: async (provider: UsageProvider) => {
     try {
       if (provider === 'none') return
+      if (provider === 'google') return
       if (provider === 'anthropic') {
         const email = await window.accountOps.getClaudeEmail()
         set({ anthropicEmail: email })

@@ -14,36 +14,46 @@ import { getUserEnvironmentVariables } from './env-vars'
 import { getConfiguredClaudeMcpServers } from './mcp-settings'
 import { generateSessionTitle } from './claude-session-title'
 import { autoRenameWorktreeBranch } from './git-service'
-import { Options, PermissionMode } from '@anthropic-ai/claude-agent-sdk'
+import { Options, PermissionMode, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 import { CommandFilterService, type CommandFilterSettings } from './command-filter-service'
 import { APP_SETTINGS_DB_KEY } from '@shared/types/settings'
 
 const log = createLogger({ component: 'ClaudeCodeImplementer' })
 
-const CLAUDE_EFFORT_VARIANTS = { low: {}, medium: {}, high: {} }
-const CLAUDE_OPUS_EFFORT_VARIANTS = { low: {}, medium: {}, high: {}, xhigh: {}, max: {} }
+const CLAUDE_FRONTIER_EFFORT_VARIANTS = { low: {}, medium: {}, high: {}, xhigh: {}, max: {} }
 
 const CLAUDE_MODELS = [
   {
+    id: 'claude-fable-5',
+    name: 'Fable 5',
+    limit: { context: 1000000, output: 128000 },
+    variants: CLAUDE_FRONTIER_EFFORT_VARIANTS,
+    defaultVariant: 'high',
+    adaptiveThinking: true
+  },
+  {
     id: 'opus',
-    name: 'Opus 4.7',
-    limit: { context: 1000000, output: 32000 },
-    variants: CLAUDE_OPUS_EFFORT_VARIANTS,
-    defaultVariant: 'high'
+    name: 'Opus 4.8',
+    limit: { context: 1000000, output: 128000 },
+    variants: CLAUDE_FRONTIER_EFFORT_VARIANTS,
+    defaultVariant: 'xhigh',
+    adaptiveThinking: true
   },
   {
     id: 'sonnet',
-    name: 'Sonnet 4.6',
-    limit: { context: 200000, output: 16000 },
-    variants: CLAUDE_EFFORT_VARIANTS,
-    defaultVariant: 'high'
+    name: 'Sonnet 5',
+    limit: { context: 1000000, output: 128000 },
+    variants: CLAUDE_FRONTIER_EFFORT_VARIANTS,
+    defaultVariant: 'high',
+    adaptiveThinking: true
   },
   {
     id: 'haiku',
     name: 'Haiku 4.5',
-    limit: { context: 200000, output: 8192 },
-    variants: CLAUDE_EFFORT_VARIANTS,
-    defaultVariant: 'high'
+    limit: { context: 200000, output: 64000 },
+    variants: {},
+    defaultVariant: undefined,
+    adaptiveThinking: false
   }
 ]
 
@@ -131,7 +141,7 @@ export class ClaudeCodeImplementer implements AgentSdkImplementer {
   private dbService: DatabaseService | null = null
   private claudeBinaryPath: string | null = null
   private sessions = new Map<string, ClaudeSessionState>()
-  private selectedModel: string = 'sonnet'
+  private selectedModel: string | undefined = 'sonnet'
   private selectedVariant: string | undefined
   /** Tracks in-flight tool_use content blocks for input_json_delta accumulation.
    *  Keyed by octobSessionId → Map<blockIndex, { id, name, inputJson }>. */
@@ -485,7 +495,6 @@ export class ClaudeCodeImplementer implements AgentSdkImplementer {
         cwd: session.worktreePath,
         permissionMode: sdkPermissionMode,
         abortController: session.abortController,
-        maxThinkingTokens: 31999,
         model: resolvedModel,
         includePartialMessages: true,
         enableFileCheckpointing: true,
@@ -493,8 +502,9 @@ export class ClaudeCodeImplementer implements AgentSdkImplementer {
         mcpServers,
         strictMcpConfig: true,
         extraArgs: { 'replay-user-messages': null },
-        thinking: { type: 'adaptive' },
-        effort: effortLevel,
+        ...(modelDef?.adaptiveThinking === false
+          ? { maxThinkingTokens: 31999 }
+          : { thinking: { type: 'adaptive' as const }, effort: effortLevel }),
         debugFile: join(app.getPath('home'), '.octob', 'logs', 'claude-debug.log'),
         env: {
           ...process.env,
@@ -3205,7 +3215,7 @@ export class ClaudeCodeImplementer implements AgentSdkImplementer {
   private createUserMessageIterable(
     contentBlocks: Array<Record<string, unknown>>,
     sessionId: string
-  ): AsyncIterable<Record<string, unknown>> {
+  ): AsyncIterable<SDKUserMessage> {
     const message = {
       type: 'user' as const,
       message: {
@@ -3214,7 +3224,7 @@ export class ClaudeCodeImplementer implements AgentSdkImplementer {
       },
       parent_tool_use_id: null,
       session_id: sessionId
-    }
+    } as SDKUserMessage
 
     return {
       [Symbol.asyncIterator]() {

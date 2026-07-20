@@ -146,7 +146,7 @@ export function WorktreePickerModal({
     providerID: string; modelID: string; variant?: string
   } | null>(null)
   const [selectedSdk, setSelectedSdk] = useState<
-    'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | null
+    'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'antigravity' | null
   >(null)
 
   // ── Store access ────────────────────────────────────────────────
@@ -312,7 +312,7 @@ export function WorktreePickerModal({
 
   // ── Handle SDK change ───────────────────────────────────────────
   const handleSdkChange = useCallback(
-    (sdk: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli') => {
+    (sdk: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'antigravity') => {
       setSelectedSdk(sdk)
       setSelectedModel(null)  // reset model — new SDK has different models
     },
@@ -988,7 +988,8 @@ export function WorktreePickerModal({
                   availableAgentSdks.claude,
                   availableAgentSdks.codex,
                   availableAgentSdks.mistralVibe,
-                  availableAgentSdks.cursorCli
+                  availableAgentSdks.cursorCli,
+                  availableAgentSdks.antigravity
                 ].filter(Boolean).length >= 2 && (
                 <div className="flex gap-1.5" data-testid="sdk-toggle">
                   {availableAgentSdks.opencode && (
@@ -1064,6 +1065,21 @@ export function WorktreePickerModal({
                       )}
                     >
                       Cursor CLI
+                    </button>
+                  )}
+                  {availableAgentSdks.antigravity && (
+                    <button
+                      type="button"
+                      data-testid="sdk-toggle-antigravity"
+                      onClick={() => handleSdkChange('antigravity')}
+                      className={cn(
+                        'px-2.5 py-1 rounded-md text-xs border transition-colors',
+                        agentSdk === 'antigravity'
+                          ? 'bg-primary text-primary-foreground border-primary'
+                          : 'bg-muted/50 text-muted-foreground border-border hover:bg-accent/50'
+                      )}
+                    >
+                      Antigravity
                     </button>
                   )}
                 </div>

@@ -17,6 +17,8 @@ export function AgentSetupGuard(): React.JSX.Element | null {
     codex: boolean
     mistralVibe: boolean
     cursorCli: boolean
+    antigravity: boolean
+    antigravityVersion: string | null
   } | null>(null)
 
   useEffect(() => {
@@ -31,13 +33,14 @@ export function AgentSetupGuard(): React.JSX.Element | null {
 
         setDetectedSdks(result)
 
-        const { opencode, claude, codex, mistralVibe, cursorCli } = result
-        const found: Array<'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli'> = []
+        const { opencode, claude, codex, mistralVibe, cursorCli, antigravity } = result
+        const found: Array<'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'antigravity'> = []
         if (opencode) found.push('opencode')
         if (claude) found.push('claude-code')
         if (codex) found.push('codex')
         if (mistralVibe) found.push('mistral-vibe')
         if (cursorCli) found.push('cursor-cli')
+        if (antigravity) found.push('antigravity')
 
         if (found.length === 0) {
           setStatus('none-found')

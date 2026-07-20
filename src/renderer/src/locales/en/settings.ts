@@ -103,7 +103,7 @@ export const settings = {
     priority1: "Worktree's last-used model (if any)",
     priority2: 'Mode-specific default (configured below)',
     priority3: 'Global default model',
-    priority4: 'System fallback (Claude Opus 4.5)',
+    priority4: 'System fallback (Claude Opus 4.8)',
     globalDefault: 'Global Default Model',
     globalFallbackHint: 'Fallback model used when no mode-specific default is configured',
     globalSimpleHint: 'Model used for all new sessions',

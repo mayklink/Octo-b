@@ -734,8 +734,8 @@ export function SessionView({ sessionId }: SessionViewProps): React.JSX.Element 
           variant: sessionRecord.model_variant ?? undefined
         }
       : globalModel
-  const currentModelId = effectiveModel?.modelID ?? 'claude-opus-4-5-20251101'
-  const currentProviderId = effectiveModel?.providerID ?? 'anthropic'
+  const currentModelId = effectiveModel?.modelID ?? (sessionAgentSdk === 'claude-code' ? 'opus' : 'claude-opus-4-8')
+  const currentProviderId = effectiveModel?.providerID ?? (sessionAgentSdk === 'claude-code' ? 'claude-code' : 'anthropic')
   // Claude Code and Codex SDKs skip PLAN_MODE_PREFIX (they don't use the text-prefix approach)
   const isClaudeCode = sessionRecord?.agent_sdk === 'claude-code'
   const skipPlanModePrefix = isClaudeCode || sessionRecord?.agent_sdk === 'codex'

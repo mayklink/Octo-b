@@ -89,7 +89,7 @@ interface Session {
   name: string | null
   status: 'active' | 'completed' | 'error'
   opencode_session_id: string | null
-  agent_sdk: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'terminal'
+  agent_sdk: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'antigravity' | 'terminal'
   mode: 'build' | 'plan'
   model_provider_id: string | null
   model_id: string | null
@@ -433,7 +433,7 @@ declare global {
           connection_id?: string | null
           name?: string | null
           opencode_session_id?: string | null
-          agent_sdk?: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'terminal'
+          agent_sdk?: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'antigravity' | 'terminal'
           session_type?: 'default' | 'board-assistant'
           model_provider_id?: string | null
           model_id?: string | null
@@ -449,7 +449,7 @@ declare global {
             name?: string | null
             status?: 'active' | 'completed' | 'error'
             opencode_session_id?: string | null
-            agent_sdk?: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'terminal'
+            agent_sdk?: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'antigravity' | 'terminal'
             mode?: 'build' | 'plan'
             model_provider_id?: string | null
             model_id?: string | null
@@ -659,6 +659,8 @@ declare global {
         codex: boolean
         mistralVibe: boolean
         cursorCli: boolean
+        antigravity: boolean
+        antigravityVersion: string | null
       }>
       configureCodexBinaryPath: (
         binaryPath: string
@@ -766,7 +768,7 @@ declare global {
       ) => Promise<{ success: boolean; messages: unknown[]; error?: string }>
       // List available models from all configured providers
       listModels: (opts?: {
-        agentSdk?: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'terminal'
+        agentSdk?: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'antigravity' | 'terminal'
       }) => Promise<{
         success: boolean
         providers: Record<string, unknown>
@@ -777,13 +779,13 @@ declare global {
         providerID: string
         modelID: string
         variant?: string
-        agentSdk?: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'terminal'
+        agentSdk?: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'antigravity' | 'terminal'
       }) => Promise<{ success: boolean; error?: string }>
       // Get model info (name, context limit)
       modelInfo: (
         worktreePath: string,
         modelId: string,
-        agentSdk?: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'terminal'
+        agentSdk?: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'antigravity' | 'terminal'
       ) => Promise<{
         success: boolean
         model?: { id: string; name: string; limit: { context: number } }
@@ -1543,6 +1545,7 @@ declare global {
     usageOps: {
       fetch: () => Promise<import('../shared/types/usage').UsageResult>
       fetchOpenai: () => Promise<import('../shared/types/usage').OpenAIUsageResult>
+      fetchAntigravity: () => Promise<import('../shared/types/usage').UsageResult>
     }
     accountOps: {
       getClaudeEmail: () => Promise<string | null>

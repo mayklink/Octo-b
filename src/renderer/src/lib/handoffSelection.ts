@@ -30,15 +30,17 @@ const SDK_DISPLAY_NAMES: Record<HandoffAgentSdk, string> = {
   'claude-code': 'Claude Code',
   codex: 'Codex',
   'mistral-vibe': 'Mistral Vibe',
-  'cursor-cli': 'Cursor CLI'
+  'cursor-cli': 'Cursor CLI',
+  antigravity: 'Google Antigravity'
 }
 
 const FALLBACK_MODELS: Record<HandoffAgentSdk, SelectedModel> = {
-  opencode: { providerID: 'anthropic', modelID: 'claude-opus-4-5-20251101' },
-  'claude-code': { providerID: 'anthropic', modelID: 'claude-opus-4-5-20251101' },
+  opencode: { providerID: 'anthropic', modelID: 'claude-opus-4-8' },
+  'claude-code': { providerID: 'claude-code', modelID: 'opus', variant: 'xhigh' },
   codex: { providerID: 'codex', modelID: 'gpt-5.6-sol' },
   'mistral-vibe': { providerID: 'mistral-vibe', modelID: 'devstral-medium-latest' },
-  'cursor-cli': { providerID: 'cursor-cli', modelID: 'auto' }
+  'cursor-cli': { providerID: 'cursor-cli', modelID: 'auto' },
+  antigravity: { providerID: 'antigravity', modelID: 'Gemini 3.5 Flash (High)' }
 }
 
 const modelCatalogCache = new Map<HandoffAgentSdk, ProviderModels[]>()
@@ -51,11 +53,12 @@ function normalizeHandoffSdk(
     | 'codex'
     | 'mistral-vibe'
     | 'cursor-cli'
+    | 'antigravity'
     | 'terminal'
     | null
     | undefined
 ): HandoffAgentSdk {
-  if (sdk === 'claude-code' || sdk === 'codex' || sdk === 'mistral-vibe' || sdk === 'cursor-cli')
+  if (sdk === 'claude-code' || sdk === 'codex' || sdk === 'mistral-vibe' || sdk === 'cursor-cli' || sdk === 'antigravity')
     return sdk
   return 'opencode'
 }
@@ -96,7 +99,7 @@ function getWorktreeFallbackModel(worktreeId?: string): SelectedModel | null {
 
 function resolveSessionSelection(opts: {
   worktreeId?: string
-  agentSdk?: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'terminal'
+  agentSdk?: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'antigravity' | 'terminal'
   mode?: 'build' | 'plan' | 'super-plan'
 }): EffectiveHandoffSelection {
   const settings = useSettingsStore.getState()
@@ -151,7 +154,8 @@ export function getAvailableHandoffAgentSdks(
     'claude-code',
     'codex',
     'mistral-vibe',
-    'cursor-cli'
+    'cursor-cli',
+    'antigravity'
   ]
   return orderedSdks.filter((sdk) => isAgentSdkAvailable(sdk, availableAgentSdks))
 }
@@ -246,11 +250,11 @@ export function getEffectiveHandoffSelection(opts: {
 
 export function resolveSessionCreationSelection(opts: {
   worktreeId?: string
-  agentSdkOverride?: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'terminal'
+  agentSdkOverride?: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'antigravity' | 'terminal'
   initialMode?: 'build' | 'plan' | 'super-plan'
   modelOverride?: SelectedModel
 }): {
-  agentSdk: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'terminal'
+  agentSdk: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'antigravity' | 'terminal'
   model: SelectedModel | null
 } {
   const settings = useSettingsStore.getState()

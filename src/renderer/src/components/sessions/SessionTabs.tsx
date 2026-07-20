@@ -79,7 +79,7 @@ interface SessionTabProps {
   sessionId: string
   name: string
   isActive: boolean
-  agentSdk: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'terminal'
+  agentSdk: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'antigravity' | 'terminal'
   onClick: () => void
   onClose: (e: React.MouseEvent) => void
   onMiddleClick: (e: React.MouseEvent) => void
@@ -649,7 +649,10 @@ export function SessionTabs(): React.JSX.Element | null {
   const multipleProvidersAvailable = [
     availableAgentSdks?.opencode,
     availableAgentSdks?.claude,
-    availableAgentSdks?.codex
+    availableAgentSdks?.codex,
+    availableAgentSdks?.mistralVibe,
+    availableAgentSdks?.cursorCli,
+    availableAgentSdks?.antigravity
   ].filter(Boolean).length >= 2
   const autoStartedRef = useRef<string | null>(null)
 
@@ -826,7 +829,7 @@ export function SessionTabs(): React.JSX.Element | null {
 
   // Handle creating a new session with a specific agent SDK (from context menu)
   const handleCreateSessionWithSdk = async (
-    sdk: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'terminal'
+    sdk: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'antigravity' | 'terminal'
   ) => {
     if (isConnectionMode && selectedConnectionId) {
       const result = await createConnectionSession(selectedConnectionId, sdk)
@@ -1271,9 +1274,27 @@ export function SessionTabs(): React.JSX.Element | null {
                     New Codex Session
                   </ContextMenuItem>
                 )}
+                {availableAgentSdks?.mistralVibe && (
+                  <ContextMenuItem onSelect={() => handleCreateSessionWithSdk('mistral-vibe')}>
+                    New Mistral Vibe Session
+                  </ContextMenuItem>
+                )}
+                {availableAgentSdks?.cursorCli && (
+                  <ContextMenuItem onSelect={() => handleCreateSessionWithSdk('cursor-cli')}>
+                    New Cursor CLI Session
+                  </ContextMenuItem>
+                )}
+                {availableAgentSdks?.antigravity && (
+                  <ContextMenuItem onSelect={() => handleCreateSessionWithSdk('antigravity')}>
+                    New Antigravity Session
+                  </ContextMenuItem>
+                )}
                 {(availableAgentSdks?.opencode ||
                   availableAgentSdks?.claude ||
-                  availableAgentSdks?.codex) && <ContextMenuSeparator />}
+                  availableAgentSdks?.codex ||
+                  availableAgentSdks?.mistralVibe ||
+                  availableAgentSdks?.cursorCli ||
+                  availableAgentSdks?.antigravity) && <ContextMenuSeparator />}
                 <ContextMenuItem onSelect={() => handleCreateSessionWithSdk('terminal')}>
                   <TerminalSquare className="h-4 w-4 mr-2 text-emerald-500" />
                   New Terminal

@@ -107,7 +107,7 @@ const db = {
       connection_id?: string | null
       name?: string | null
       opencode_session_id?: string | null
-      agent_sdk?: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'terminal'
+      agent_sdk?: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'antigravity' | 'terminal'
       mode?: 'build' | 'plan'
       session_type?: 'default' | 'board-assistant'
       model_provider_id?: string | null
@@ -126,7 +126,7 @@ const db = {
         name?: string | null
         status?: 'active' | 'completed' | 'error'
         opencode_session_id?: string | null
-        agent_sdk?: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'terminal'
+        agent_sdk?: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'antigravity' | 'terminal'
         mode?: 'build' | 'plan'
         model_provider_id?: string | null
         model_id?: string | null
@@ -488,6 +488,8 @@ const systemOps = {
     codex: boolean
     mistralVibe: boolean
     cursorCli: boolean
+    antigravity: boolean
+    antigravityVersion: string | null
   }> => ipcRenderer.invoke('system:detectAgentSdks'),
 
   configureCodexBinaryPath: (
@@ -1407,7 +1409,7 @@ const opencodeOps = {
 
   // List available models from all configured providers
   listModels: (opts?: {
-    agentSdk?: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'terminal'
+    agentSdk?: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'antigravity' | 'terminal'
   }): Promise<{
     success: boolean
     providers: Record<string, unknown>
@@ -1420,7 +1422,7 @@ const opencodeOps = {
       providerID: string
       modelID: string
       variant?: string
-      agentSdk?: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'terminal'
+      agentSdk?: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'antigravity' | 'terminal'
     } | null
   ): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke('opencode:setModel', model),
@@ -1429,7 +1431,7 @@ const opencodeOps = {
   modelInfo: (
     worktreePath: string,
     modelId: string,
-    agentSdk?: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'terminal'
+    agentSdk?: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'antigravity' | 'terminal'
   ): Promise<{
     success: boolean
     model?: { id: string; name: string; limit: { context: number } }
@@ -1918,7 +1920,8 @@ const connectionOps = {
 
 const usageOps = {
   fetch: () => ipcRenderer.invoke('usage:fetch'),
-  fetchOpenai: () => ipcRenderer.invoke('usage:fetchOpenai')
+  fetchOpenai: () => ipcRenderer.invoke('usage:fetchOpenai'),
+  fetchAntigravity: () => ipcRenderer.invoke('usage:fetchAntigravity')
 }
 
 const accountOps = {

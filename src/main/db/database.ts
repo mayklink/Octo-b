@@ -1087,14 +1087,14 @@ export class DatabaseService {
    */
   getAgentSdkForSession(
     sessionKey: string
-  ): 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'terminal' | null {
+  ): 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'antigravity' | 'terminal' | null {
     const db = this.getDb()
     const row = db
       .prepare(
         'SELECT agent_sdk FROM sessions WHERE opencode_session_id = ? OR id = ? LIMIT 1'
       )
       .get(sessionKey, sessionKey) as
-      | { agent_sdk: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'terminal' }
+      | { agent_sdk: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'antigravity' | 'terminal' }
       | undefined
     return row?.agent_sdk ?? null
   }

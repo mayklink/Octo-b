@@ -12,6 +12,10 @@ interface UsageState {
   openaiLastFetchedAt: number | null
   openaiIsLoading: boolean
 
+  googleUsage: UsageData | null
+  googleLastFetchedAt: number | null
+  googleIsLoading: boolean
+
   activeProvider: UsageProvider
 
   fetchUsageForProvider: (provider: UsageProvider) => Promise<void>
@@ -30,6 +34,10 @@ export const useUsageStore = create<UsageState>()((set, get) => ({
   openaiUsage: null,
   openaiLastFetchedAt: null,
   openaiIsLoading: false,
+
+  googleUsage: null,
+  googleLastFetchedAt: null,
+  googleIsLoading: false,
 
   activeProvider: 'anthropic',
 
@@ -52,7 +60,7 @@ export const useUsageStore = create<UsageState>()((set, get) => ({
       } finally {
         set({ anthropicIsLoading: false, anthropicLastFetchedAt: Date.now() })
       }
-    } else {
+    } else if (provider === 'openai') {
       if (state.openaiIsLoading) return
       if (state.openaiLastFetchedAt && Date.now() - state.openaiLastFetchedAt < DEBOUNCE_MS) return
 
@@ -64,6 +72,16 @@ export const useUsageStore = create<UsageState>()((set, get) => ({
         }
       } finally {
         set({ openaiIsLoading: false, openaiLastFetchedAt: Date.now() })
+      }
+    } else {
+      if (state.googleIsLoading) return
+      if (state.googleLastFetchedAt && Date.now() - state.googleLastFetchedAt < DEBOUNCE_MS) return
+      set({ googleIsLoading: true })
+      try {
+        const result = await window.usageOps.fetchAntigravity()
+        if (result.success) set({ googleUsage: result.data ?? null })
+      } finally {
+        set({ googleIsLoading: false, googleLastFetchedAt: Date.now() })
       }
     }
   },
@@ -85,7 +103,7 @@ export const useUsageStore = create<UsageState>()((set, get) => ({
       } finally {
         set({ anthropicIsLoading: false, anthropicLastFetchedAt: Date.now() })
       }
-    } else {
+    } else if (provider === 'openai') {
       if (state.openaiIsLoading) return
 
       set({ openaiIsLoading: true })
@@ -97,6 +115,15 @@ export const useUsageStore = create<UsageState>()((set, get) => ({
       } finally {
         set({ openaiIsLoading: false, openaiLastFetchedAt: Date.now() })
       }
+    } else {
+      if (state.googleIsLoading) return
+      set({ googleIsLoading: true })
+      try {
+        const result = await window.usageOps.fetchAntigravity()
+        if (result.success) set({ googleUsage: result.data ?? null })
+      } finally {
+        set({ googleIsLoading: false, googleLastFetchedAt: Date.now() })
+      }
     }
   },
 
@@ -106,8 +133,11 @@ export const useUsageStore = create<UsageState>()((set, get) => ({
     if (provider === 'none') return
 
     const state = get()
-    const lastFetched =
-      provider === 'anthropic' ? state.anthropicLastFetchedAt : state.openaiLastFetchedAt
+    const lastFetched = provider === 'anthropic'
+      ? state.anthropicLastFetchedAt
+      : provider === 'openai'
+        ? state.openaiLastFetchedAt
+        : state.googleLastFetchedAt
     const isStale = !lastFetched || Date.now() - lastFetched >= DEBOUNCE_MS
 
     if (isStale) {
@@ -133,6 +163,7 @@ export function resolveUsageProvider(session: SessionLike): UsageProvider {
   if (session.agent_sdk === 'terminal') return 'none'
   if (session.agent_sdk === 'mistral-vibe') return 'none'
   if (session.agent_sdk === 'cursor-cli') return 'none'
+  if (session.agent_sdk === 'antigravity') return 'google'
   if (session.agent_sdk === 'claude-code') return 'anthropic'
   if (session.model_provider_id === 'openai') return 'openai'
   if (session.model_id?.startsWith('gpt')) return 'openai'
@@ -146,9 +177,11 @@ export function resolveDefaultUsageProvider(
     | 'codex'
     | 'mistral-vibe'
     | 'cursor-cli'
+    | 'antigravity'
     | 'terminal'
 ): UsageProvider {
   if (agentSdk === 'codex') return 'openai'
+  if (agentSdk === 'antigravity') return 'google'
   if (agentSdk === 'mistral-vibe' || agentSdk === 'terminal' || agentSdk === 'cursor-cli')
     return 'none'
   return 'anthropic'
@@ -169,12 +202,17 @@ function isAnthropicUsageData(value: unknown): value is UsageData {
 export function normalizeUsage(
   provider: UsageProvider,
   anthropicUsage: UsageData | null | undefined,
-  openaiUsage: OpenAIUsageData | null | undefined
+  openaiUsage: OpenAIUsageData | null | undefined,
+  googleUsage?: UsageData | null
 ): UsageData | null {
   if (provider === 'none') return null
 
   if (provider === 'anthropic') {
     return isAnthropicUsageData(anthropicUsage) ? anthropicUsage : null
+  }
+
+  if (provider === 'google') {
+    return isAnthropicUsageData(googleUsage) ? googleUsage : null
   }
 
   if (!openaiUsage) return null

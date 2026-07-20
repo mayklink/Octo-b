@@ -37,7 +37,7 @@ export interface SelectedModel {
   variant?: string
 }
 
-export type AgentSdk = 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'terminal'
+export type AgentSdk = 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'antigravity' | 'terminal'
 export type HandoffAgentSdk = Exclude<AgentSdk, 'terminal'>
 
 export interface ModeDefaultModels {
@@ -270,6 +270,8 @@ interface SettingsState extends AppSettings {
     codex: boolean
     mistralVibe: boolean
     cursorCli: boolean
+    antigravity: boolean
+    antigravityVersion: string | null
   } | null
 
   // Actions

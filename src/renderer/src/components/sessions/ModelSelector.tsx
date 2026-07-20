@@ -28,7 +28,7 @@ interface ModelSelectorProps {
   value?: { providerID: string; modelID: string; variant?: string } | null
   onChange?: (model: { providerID: string; modelID: string; variant?: string }) => void
   // Override the SDK used for model listing (e.g. force 'opencode' in settings when defaultAgentSdk is 'terminal')
-  agentSdkOverride?: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli'
+  agentSdkOverride?: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'antigravity'
   disableTitleTooltip?: boolean
   hideProviderPrefix?: boolean
 }
@@ -58,6 +58,9 @@ export function ModelSelector({
   const rawAgentSdk = agentSdkOverride ?? session?.agent_sdk ?? defaultAgentSdk ?? 'opencode'
   // Terminal SDK has no models — fall back to opencode for model listing
   const agentSdk = rawAgentSdk === 'terminal' ? 'opencode' : rawAgentSdk
+  const fallbackModel = agentSdk === 'claude-code'
+    ? { providerID: 'claude-code', modelID: 'opus' }
+    : { providerID: 'anthropic', modelID: 'claude-opus-4-8' }
   const globalModel = useSettingsStore((state) => resolveModelForSdk(agentSdk, state))
   const sessionModel =
     session?.model_id && session.model_provider_id
@@ -150,17 +153,17 @@ export function ModelSelector({
 
   function isActiveModel(model: ModelInfo): boolean {
     if (!selectedModel) {
-      return model.providerID === 'anthropic' && model.id === 'claude-opus-4-5-20251101'
+      return model.providerID === fallbackModel.providerID && model.id === fallbackModel.modelID
     }
     return selectedModel.providerID === model.providerID && selectedModel.modelID === model.id
   }
 
   // Find the currently selected model info
   const currentModel = useMemo((): ModelInfo | null => {
-    const modelID = selectedModel?.modelID || 'claude-opus-4-5-20251101'
-    const providerID = selectedModel?.providerID || 'anthropic'
+    const modelID = selectedModel?.modelID || fallbackModel.modelID
+    const providerID = selectedModel?.providerID || fallbackModel.providerID
     return findModelInfo(providers, providerID, modelID)
-  }, [selectedModel, providers])
+  }, [selectedModel, providers, fallbackModel.modelID, fallbackModel.providerID])
 
   const providerPrefix = useMemo(() => {
     if (hideProviderPrefix || !showModelProvider) return null
@@ -219,8 +222,8 @@ export function ModelSelector({
   const displayName = currentModel
     ? getModelDisplayName(currentModel)
     : getModelDisplayName({
-        id: selectedModel?.modelID || 'claude-opus-4-5-20251101',
-        providerID: 'anthropic'
+        id: selectedModel?.modelID || fallbackModel.modelID,
+        providerID: selectedModel?.providerID || fallbackModel.providerID
       })
 
   const filteredProviders = useMemo(() => {

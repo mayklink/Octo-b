@@ -9,13 +9,15 @@ import {
 } from '@/components/ui/alert-dialog'
 
 interface AgentPickerDialogProps {
-  onSelect: (sdk: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli') => void
+  onSelect: (sdk: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'antigravity') => void
   availableSdks: {
     opencode: boolean
     claude: boolean
     codex: boolean
     mistralVibe: boolean
     cursorCli: boolean
+    antigravity: boolean
+    antigravityVersion: string | null
   }
 }
 
@@ -103,6 +105,21 @@ export function AgentPickerDialog({
               <div className="text-sm font-medium">Cursor CLI</div>
               <div className="text-xs text-muted-foreground mt-1">
                 Cursor agent (install CLI, agent acp on PATH)
+              </div>
+            </button>
+          )}
+          {availableSdks.antigravity && (
+            <button
+              onClick={() => onSelect('antigravity')}
+              className={cn(
+                'flex-1 px-4 py-3 rounded-lg border-2 border-border',
+                'hover:border-primary hover:bg-accent/50 transition-colors',
+                'text-center cursor-pointer'
+              )}
+            >
+              <div className="text-sm font-medium">Google Antigravity</div>
+              <div className="text-xs text-muted-foreground mt-1">
+                Antigravity CLI{availableSdks.antigravityVersion ? ` v${availableSdks.antigravityVersion}` : ''}
               </div>
             </button>
           )}

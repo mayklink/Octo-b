@@ -148,7 +148,7 @@ function getStatusLabel(status: ReturnType<typeof useBoardChatStore.getState>['s
 }
 
 function getAgentSdkLabel(
-  agentSdk: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli'
+  agentSdk: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'antigravity'
 ): string {
   switch (agentSdk) {
     case 'claude-code':
@@ -159,6 +159,8 @@ function getAgentSdkLabel(
       return 'Mistral Vibe'
     case 'cursor-cli':
       return 'Cursor CLI'
+    case 'antigravity':
+      return 'Google Antigravity'
     default:
       return 'OpenCode'
   }
@@ -558,10 +560,10 @@ function BoardChatHeader({
   selectedTargetProjectId: string | null
   status: ReturnType<typeof useBoardChatStore.getState>['status']
   selectedModel: SelectedModel | null
-  agentSdk: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli'
-  availableAgentSdks: Array<'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli'>
+  agentSdk: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'antigravity'
+  availableAgentSdks: Array<'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'antigravity'>
   modelResetVisible: boolean
-  onSelectAgentSdk: (agentSdk: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli') => void
+  onSelectAgentSdk: (agentSdk: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'antigravity') => void
   onSelectModel: (model: SelectedModel) => void
   onResetModel: () => void
   onSelectTargetProject: (projectId: string) => void
@@ -1318,13 +1320,14 @@ export function BoardAssistantView({ projectId }: BoardAssistantViewProps): Reac
   const resolvedDefaultModel = useSettingsStore((state) => resolveBoardChatDefaultModel(state, effectiveAgentSdk))
   const effectiveSelectedModel = selectedModelOverride ?? resolvedDefaultModel
   const agentSdkOptions = useMemo(() => {
-    const options: Array<'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli'> = []
+    const options: Array<'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'antigravity'> = []
     if (!availableAgentSdks) return [effectiveAgentSdk]
     if (availableAgentSdks.opencode) options.push('opencode')
     if (availableAgentSdks.claude) options.push('claude-code')
     if (availableAgentSdks.codex) options.push('codex')
     if (availableAgentSdks.mistralVibe) options.push('mistral-vibe')
     if (availableAgentSdks.cursorCli) options.push('cursor-cli')
+    if (availableAgentSdks.antigravity) options.push('antigravity')
     return options.length > 0 ? options : [effectiveAgentSdk]
   }, [availableAgentSdks, effectiveAgentSdk])
   const handleMaterializedSessionId = useCallback((nextOpencodeSessionId: string) => {
@@ -1603,7 +1606,7 @@ export function BoardAssistantView({ projectId }: BoardAssistantViewProps): Reac
       preserveOpen?: boolean
       nextAssistantMode?: BoardChatMode
       nextTargetProjectId?: string | null
-      nextSelectedAgentSdkOverride?: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | null
+      nextSelectedAgentSdkOverride?: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'antigravity' | null
       nextSelectedModelOverride?: SelectedModel | null
     }) => {
       const stateBeforeCleanup = useBoardChatStore.getState()
@@ -1883,7 +1886,7 @@ export function BoardAssistantView({ projectId }: BoardAssistantViewProps): Reac
     addLocalSystemMessage('Board assistant model reset to the app default.')
   }, [addLocalSystemMessage, handleDiscardConversation, setSelectedModelOverride])
 
-  const handleSelectAgentSdk = useCallback(async (nextAgentSdk: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli') => {
+  const handleSelectAgentSdk = useCallback(async (nextAgentSdk: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'antigravity') => {
     const nextOverride = nextAgentSdk === defaultBoardAgentSdk ? null : nextAgentSdk
     setSelectedAgentSdkOverride(nextOverride)
     setSelectedModelOverride(null)

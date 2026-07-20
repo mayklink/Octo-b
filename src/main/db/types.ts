@@ -99,7 +99,7 @@ export interface Session {
   name: string | null
   status: 'active' | 'completed' | 'error'
   opencode_session_id: string | null
-  agent_sdk: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'terminal'
+  agent_sdk: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'antigravity' | 'terminal'
   mode: SessionMode
   session_type: SessionType
   model_provider_id: string | null
@@ -117,7 +117,7 @@ export interface SessionCreate {
   connection_id?: string | null
   name?: string | null
   opencode_session_id?: string | null
-  agent_sdk?: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'terminal'
+  agent_sdk?: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'antigravity' | 'terminal'
   mode?: SessionMode
   session_type?: SessionType
   model_provider_id?: string | null
@@ -130,7 +130,7 @@ export interface SessionUpdate {
   name?: string | null
   status?: 'active' | 'completed' | 'error'
   opencode_session_id?: string | null
-  agent_sdk?: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'terminal'
+  agent_sdk?: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'antigravity' | 'terminal'
   mode?: SessionMode
   session_type?: SessionType
   model_provider_id?: string | null
@@ -495,7 +495,7 @@ export interface PendingLaunchConfig {
   prompt: string
   mode: 'build' | 'plan' | 'super-plan'
   model: { providerID: string; modelID: string; variant?: string } | null
-  sdk: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli'
+  sdk: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'antigravity'
   codexFastMode: boolean
 }
 

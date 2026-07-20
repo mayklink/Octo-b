@@ -14,7 +14,7 @@ const log = createLogger({ component: 'OpenCodeService' })
 // Default model configuration
 const DEFAULT_MODEL = {
   providerID: 'anthropic',
-  modelID: 'claude-opus-4-5-20251101'
+  modelID: 'claude-opus-4-8'
 }
 
 const SELECTED_MODEL_DB_KEY = 'selected_model'

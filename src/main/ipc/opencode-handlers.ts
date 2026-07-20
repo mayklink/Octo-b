@@ -30,6 +30,7 @@ const permissionListInflightByDirectory = new Map<
 >()
 
 const BACKEND_SESSION_PROBE_ORDER: AgentSdkId[] = [
+  'antigravity',
   'cursor-cli',
   'mistral-vibe',
   'claude-code',
@@ -45,7 +46,7 @@ export function registerOpenCodeHandlers(
   function resolveDispatcherSdkId(
     worktreePath: string | undefined,
     backendSessionId: string
-  ): 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'terminal' | null {
+  ): 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'antigravity' | 'terminal' | null {
     if (!dbService) return null
 
     const sdkId = dbService.getAgentSdkForSession(backendSessionId)
@@ -315,7 +316,7 @@ export function registerOpenCodeHandlers(
   // Get available models from all configured providers
   ipcMain.handle(
     'opencode:models',
-    async (_event, opts?: { agentSdk?: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' }) => {
+    async (_event, opts?: { agentSdk?: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'antigravity' }) => {
       log.info('IPC: opencode:models', { agentSdk: opts?.agentSdk })
       try {
         if (opts?.agentSdk && opts.agentSdk !== 'opencode' && sdkManager) {
@@ -348,7 +349,7 @@ export function registerOpenCodeHandlers(
         providerID: string
         modelID: string
         variant?: string
-        agentSdk?: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli'
+        agentSdk?: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'antigravity'
       } | null
     ) => {
       log.info('IPC: opencode:setModel', {
@@ -392,7 +393,7 @@ export function registerOpenCodeHandlers(
         worktreePath,
         modelId,
         agentSdk
-      }: { worktreePath: string; modelId: string; agentSdk?: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' }
+      }: { worktreePath: string; modelId: string; agentSdk?: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'antigravity' }
     ) => {
       log.info('IPC: opencode:modelInfo', { worktreePath, modelId, agentSdk })
       try {

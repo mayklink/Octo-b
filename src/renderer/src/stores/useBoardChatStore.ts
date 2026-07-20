@@ -59,7 +59,7 @@ interface ResetBoardChatOptions {
   scope?: BoardChatScope | null
   assistantMode?: BoardChatMode
   selectedTargetProjectId?: string | null
-  selectedAgentSdkOverride?: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | null
+  selectedAgentSdkOverride?: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'antigravity' | null
   selectedModelOverride?: SelectedModel | null
 }
 
@@ -76,7 +76,7 @@ export interface BoardChatSnapshot {
   sessionId: string | null
   opencodeSessionId: string | null
   runtimePath: string | null
-  selectedAgentSdkOverride: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | null
+  selectedAgentSdkOverride: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'antigravity' | null
   selectedModelOverride: SelectedModel | null
   composerValue: string
 }
@@ -104,7 +104,7 @@ interface BoardChatState extends BoardChatSnapshot {
   markDraftsCreated: (draftIds: string[]) => void
   setAssistantMode: (mode: BoardChatMode) => void
   setSelectedTargetProjectId: (projectId: string | null) => Promise<void>
-  setSelectedAgentSdkOverride: (sdk: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | null) => void
+  setSelectedAgentSdkOverride: (sdk: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'antigravity' | null) => void
   setSelectedModelOverride: (model: SelectedModel | null) => void
 
   openDrawer: () => void
@@ -131,7 +131,7 @@ interface BoardChatState extends BoardChatSnapshot {
 
 export function resolveBoardChatAgentSdk(
   defaultAgentSdk: ReturnType<typeof useSettingsStore.getState>['defaultAgentSdk'] | null | undefined
-): 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' {
+): 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'antigravity' {
   const sdk = defaultAgentSdk ?? 'opencode'
   return sdk === 'terminal' ? 'opencode' : sdk
 }
@@ -141,7 +141,7 @@ export function resolveBoardChatDefaultModel(
     ReturnType<typeof useSettingsStore.getState>,
     'defaultAgentSdk' | 'selectedModel' | 'selectedModelByProvider' | 'getModelForMode'
   >,
-  agentSdkOverride?: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | null
+  agentSdkOverride?: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'antigravity' | null
 ): SelectedModel | null {
   const agentSdk = agentSdkOverride ?? resolveBoardChatAgentSdk(settings.defaultAgentSdk)
   return settings.getModelForMode('ask') ?? resolveModelForSdk(agentSdk, settings) ?? settings.selectedModel

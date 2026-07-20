@@ -42,6 +42,7 @@ import { ClaudeCodeImplementer } from './services/claude-code-implementer'
 import { CodexImplementer } from './services/codex-implementer'
 import { MistralVibeImplementer } from './services/mistral-vibe-implementer'
 import { CursorCliImplementer } from './services/cursor-cli-implementer'
+import { AntigravityImplementer } from './services/antigravity-implementer'
 import { AgentSdkManager } from './services/agent-sdk-manager'
 import { resolveClaudeBinaryPath } from './services/claude-binary-resolver'
 import {
@@ -52,6 +53,7 @@ import {
 } from './services/codex-binary-resolver'
 import { resolveMistralVibeAcpBinaryPath } from './services/mistral-vibe-binary-resolver'
 import { resolveCursorCliAgentBinaryPath } from './services/cursor-cli-binary-resolver'
+import { resolveAntigravityBinaryPath } from './services/antigravity-binary-resolver'
 import {
   resolveOpenCodeLaunchSpec,
   type OpenCodeLaunchSpec
@@ -524,6 +526,7 @@ app.whenReady().then(async () => {
   const codexBinaryPath = resolveCodexBinaryPath()
   const mistralVibeAcpPath = resolveMistralVibeAcpBinaryPath()
   const cursorCliAgentPath = resolveCursorCliAgentBinaryPath()
+  const antigravityBinaryPath = resolveAntigravityBinaryPath()
   const openCodeLaunchSpec = resolveOpenCodeLaunchSpec()
 
   log.info('App starting', {
@@ -533,7 +536,8 @@ app.whenReady().then(async () => {
     claudeBinary: claudeBinaryPath ?? 'not found',
     codexBinary: codexBinaryPath ?? 'not found',
     vibeAcpBinary: mistralVibeAcpPath ?? 'not found',
-    cursorCliAgentBinary: cursorCliAgentPath ?? 'not found'
+    cursorCliAgentBinary: cursorCliAgentPath ?? 'not found',
+    antigravityBinary: antigravityBinaryPath ?? 'not found'
   })
 
   if (isLogMode) {
@@ -678,12 +682,16 @@ app.whenReady().then(async () => {
     const cursorCliImpl = new CursorCliImplementer()
     cursorCliImpl.setDatabaseService(getDatabase())
     cursorCliImpl.setCursorCliAgentBinaryPath(cursorCliAgentPath)
+    const antigravityImpl = new AntigravityImplementer()
+    antigravityImpl.setDatabaseService(getDatabase())
+    antigravityImpl.setAntigravityBinaryPath(antigravityBinaryPath)
     const sdkManager = new AgentSdkManager([
       openCodePlaceholder,
       claudeImpl,
       codexImpl,
       mistralVibeImpl,
-      cursorCliImpl
+      cursorCliImpl,
+      antigravityImpl
     ])
     sdkManager.setMainWindow(mainWindow)
 

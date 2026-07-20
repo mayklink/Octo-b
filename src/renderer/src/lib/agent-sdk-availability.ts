@@ -4,6 +4,8 @@ export interface AvailableAgentSdks {
   codex: boolean
   mistralVibe: boolean
   cursorCli: boolean
+  antigravity: boolean
+  antigravityVersion?: string | null
 }
 
 export type SelectableAgentSdk =
@@ -12,6 +14,7 @@ export type SelectableAgentSdk =
   | 'codex'
   | 'mistral-vibe'
   | 'cursor-cli'
+  | 'antigravity'
   | 'terminal'
 
 function getAgentSdkLabel(sdk: Exclude<SelectableAgentSdk, 'terminal'>): string {
@@ -26,6 +29,8 @@ function getAgentSdkLabel(sdk: Exclude<SelectableAgentSdk, 'terminal'>): string 
       return 'Mistral Vibe'
     case 'cursor-cli':
       return 'Cursor CLI'
+    case 'antigravity':
+      return 'Google Antigravity'
   }
 }
 
@@ -46,6 +51,8 @@ export function isAgentSdkAvailable(
       return availableAgentSdks.mistralVibe
     case 'cursor-cli':
       return availableAgentSdks.cursorCli
+    case 'antigravity':
+      return availableAgentSdks.antigravity
     case 'terminal':
       return true
   }

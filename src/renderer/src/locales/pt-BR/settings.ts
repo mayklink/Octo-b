@@ -109,7 +109,7 @@ export const settings = {
     priority1: 'Último modelo usado no worktree (se houver)',
     priority2: 'Padrão específico do modo (configurado abaixo)',
     priority3: 'Modelo padrão global',
-    priority4: 'Fallback do sistema (Claude Opus 4.5)',
+    priority4: 'Fallback do sistema (Claude Opus 4.8)',
     globalDefault: 'Modelo padrão global',
     globalFallbackHint:
       'Modelo de fallback quando não há padrão específico do modo',

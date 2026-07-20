@@ -1,6 +1,6 @@
 import type { BrowserWindow } from 'electron'
 
-export type AgentSdkId = 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'terminal'
+export type AgentSdkId = 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'antigravity' | 'terminal'
 
 export interface AgentSdkCapabilities {
   supportsUndo: boolean
@@ -168,6 +168,19 @@ export const CURSOR_CLI_CAPABILITIES: AgentSdkCapabilities = {
   supportsModelSelection: true,
   supportsReconnect: true,
   supportsPartialStreaming: true,
+  supportsSteer: false
+}
+
+/** Google Antigravity CLI (`agy`) through its official resumable headless mode. */
+export const ANTIGRAVITY_CAPABILITIES: AgentSdkCapabilities = {
+  supportsUndo: false,
+  supportsRedo: false,
+  supportsCommands: false,
+  supportsPermissionRequests: false,
+  supportsQuestionPrompts: false,
+  supportsModelSelection: true,
+  supportsReconnect: true,
+  supportsPartialStreaming: false,
   supportsSteer: false
 }
 

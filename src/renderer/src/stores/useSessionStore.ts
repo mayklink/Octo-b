@@ -38,7 +38,7 @@ function isVisibleSession(session: { name: string | null; session_type?: string 
 }
 
 function getUnavailableProviderError(
-  sdk: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'terminal'
+  sdk: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'antigravity' | 'terminal'
 ): string | null {
   const { availableAgentSdks } = useSettingsStore.getState()
   return getUnavailableAgentSdkMessage(sdk, availableAgentSdks)
@@ -63,7 +63,7 @@ interface Session {
   name: string | null
   status: 'active' | 'completed' | 'error'
   opencode_session_id: string | null
-  agent_sdk: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'terminal'
+  agent_sdk: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'antigravity' | 'terminal'
   mode: SessionMode
   session_type: 'default' | 'board-assistant'
   model_provider_id: string | null
@@ -132,7 +132,7 @@ interface SessionState {
   createSession: (
     worktreeId: string,
     projectId: string,
-    agentSdkOverride?: 'opencode' | 'claude-code' | 'codex' | 'terminal',
+    agentSdkOverride?: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'antigravity' | 'terminal',
     initialMode?: SessionMode,
     options?: { autoFocus?: boolean; modelOverride?: SelectedModel }
   ) => Promise<{ success: boolean; session?: Session; error?: string }>
@@ -204,7 +204,7 @@ interface SessionState {
   loadConnectionSessions: (connectionId: string) => Promise<void>
   createConnectionSession: (
     connectionId: string,
-    agentSdkOverride?: 'opencode' | 'claude-code' | 'codex' | 'terminal',
+    agentSdkOverride?: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'antigravity' | 'terminal',
     initialMode?: SessionMode,
     opts?: { autoFocus?: boolean; modelOverride?: SelectedModel }
   ) => Promise<{ success: boolean; session?: Session; error?: string }>
@@ -403,7 +403,7 @@ export const useSessionStore = create<SessionState>()(
       createSession: async (
         worktreeId: string,
         projectId: string,
-        agentSdkOverride?: 'opencode' | 'claude-code' | 'codex' | 'terminal',
+        agentSdkOverride?: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'antigravity' | 'terminal',
         initialMode?: SessionMode,
         options?: { autoFocus?: boolean; modelOverride?: SelectedModel }
       ) => {
@@ -1297,7 +1297,7 @@ export const useSessionStore = create<SessionState>()(
         }
 
         // Find the session's SDK to route correctly (search both scopes)
-        let agentSdk: 'opencode' | 'claude-code' | 'codex' | 'terminal' = 'opencode'
+        let agentSdk: Session['agent_sdk'] = 'opencode'
         for (const sessions of get().sessionsByWorktree.values()) {
           const found = sessions.find((s) => s.id === sessionId)
           if (found?.agent_sdk) {
@@ -1915,7 +1915,7 @@ export const useSessionStore = create<SessionState>()(
       // Create a session scoped to a connection
       createConnectionSession: async (
         connectionId: string,
-        agentSdkOverride?: 'opencode' | 'claude-code' | 'codex' | 'terminal',
+        agentSdkOverride?: 'opencode' | 'claude-code' | 'codex' | 'mistral-vibe' | 'cursor-cli' | 'antigravity' | 'terminal',
         initialMode?: SessionMode,
         opts?: { autoFocus?: boolean; modelOverride?: SelectedModel }
       ) => {
