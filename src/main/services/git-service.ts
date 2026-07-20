@@ -1772,12 +1772,17 @@ export class GitService {
     branchName: string,
     breedType: BreedType = 'dogs',
     prNumber?: number,
-    options?: { autoPull?: boolean; nameHint?: string }
+    options?: {
+      autoPull?: boolean
+      nameHint?: string
+      fetchRemoteUrl?: string
+      fetchRef?: string
+    }
   ): Promise<CreateWorktreeResult> {
     try {
       // Check if branch is already checked out (skip for PR checkouts —
       // a fork's head ref may collide with a local branch name)
-      if (prNumber == null) {
+      if (prNumber == null && !options?.fetchRemoteUrl) {
         const worktreeList = await this.git.raw(['worktree', 'list', '--porcelain'])
         const blocks = worktreeList.split('\n\n').filter(Boolean)
 
@@ -1804,6 +1809,10 @@ export class GitService {
       if (prNumber != null) {
         // Fetch the PR ref once — FETCH_HEAD stays valid for subsequent retries
         await this.git.raw(['fetch', 'origin', `pull/${prNumber}/head`])
+      } else if (options?.fetchRemoteUrl && options.fetchRef) {
+        // Azure DevOps PRs can originate from another repository. Fetching by URL
+        // keeps the user's remotes untouched while still making FETCH_HEAD available.
+        await this.git.raw(['fetch', options.fetchRemoteUrl, options.fetchRef])
       } else if (autoPull) {
         // Pull the branch to get latest changes
         pullResult = await this.pullBaseBranch(branchName, {
@@ -1860,7 +1869,7 @@ export class GitService {
         const worktreePath = join(projectWorktreesDir, `${projectName}--${worktreeName}`)
 
         try {
-          if (prNumber != null) {
+          if (prNumber != null || (options?.fetchRemoteUrl && options.fetchRef)) {
             await this.git.raw(['worktree', 'add', '-b', worktreeName, worktreePath, 'FETCH_HEAD'])
           } else {
             // Create a new branch derived from the selected branch

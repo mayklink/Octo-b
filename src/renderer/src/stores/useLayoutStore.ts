@@ -3,7 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware'
 
 export type BottomPanelTab = 'setup' | 'run' | 'terminal'
 export type CollapsedPanel = 'none' | 'top' | 'bottom'
-export type WorkspaceView = 'projects' | 'project' | 'connection'
+export type WorkspaceView = 'projects' | 'project' | 'connection' | 'pull-requests'
 export type WorkspaceContentView = 'overview' | 'session'
 export type VisualizationMode = 'basic' | 'advanced'
 export type WorkspaceMode = 'chat' | 'code' | 'git' | 'board'

@@ -22,6 +22,7 @@ import { MainPaneTerminalPanel } from './MainPaneTerminalPanel'
 import { SettingsView } from '@/components/settings'
 import { ProjectDashboard } from '@/components/projects/ProjectDashboard'
 import { WorkspaceFocusView } from './WorkspaceFocusView'
+import { PullRequestInbox } from '@/components/pr-inbox/PullRequestInbox'
 
 const SESSION_TERMINAL_VIEW_IDLE_UNMOUNT_MS = 60_000
 const MAX_MOUNTED_SESSION_TERMINAL_VIEWS = 2
@@ -241,6 +242,10 @@ export function MainPane({ children }: MainPaneProps): React.JSX.Element {
 
     if (settingsOpen) {
       return <SettingsView />
+    }
+
+    if (workspaceView === 'pull-requests' && !activeFilePath && !activeDiff && !contextEditorWorktreeId) {
+      return <PullRequestInbox />
     }
 
     // Board assistant tab is active — render BoardAssistantView in main pane
@@ -474,7 +479,7 @@ export function MainPane({ children }: MainPaneProps): React.JSX.Element {
       data-testid="main-pane"
     >
       <PRNotificationStack />
-      {!settingsOpen && (selectedWorktreeId || selectedConnectionId) && <SessionTabs />}
+      {!settingsOpen && workspaceView !== 'pull-requests' && (selectedWorktreeId || selectedConnectionId) && <SessionTabs />}
       <div className="flex-1 flex flex-col min-h-0">
         {renderContent()}
         {renderedTerminalSessionIds.map((sessionId) => {

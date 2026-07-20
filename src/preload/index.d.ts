@@ -4,6 +4,10 @@ import type {
   PetSettings,
   PetStatusPayload
 } from '../shared/types/pet'
+import type {
+  PullRequestInboxRequest,
+  PullRequestInboxResponse
+} from '../shared/types/pull-request-inbox'
 
 // Database types for renderer
 interface Connection {
@@ -615,7 +619,8 @@ declare global {
         projectName: string,
         branchName: string,
         prNumber?: number,
-        nameHint?: string
+        nameHint?: string,
+        reviewSource?: { remoteUrl: string; ref: string }
       ) => Promise<{
         success: boolean
         worktree?: Worktree
@@ -1097,6 +1102,9 @@ declare global {
       ghosttyShutdown: () => Promise<void>
     }
     gitOps: {
+      listPullRequestInbox: (
+        request: PullRequestInboxRequest
+      ) => Promise<PullRequestInboxResponse>
       // Get file statuses for a worktree
       getFileStatuses: (worktreePath: string) => Promise<{
         success: boolean

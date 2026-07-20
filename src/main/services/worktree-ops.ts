@@ -60,6 +60,8 @@ export interface CreateFromBranchParams {
   branchName: string
   prNumber?: number
   nameHint?: string
+  fetchRemoteUrl?: string
+  fetchRef?: string
 }
 
 // ── Result types ────────────────────────────────────────────────
@@ -596,7 +598,12 @@ export async function createWorktreeFromBranchOp(
       params.branchName,
       breedType,
       params.prNumber,
-      { autoPull: autoPullEnabled, nameHint: params.nameHint }
+      {
+        autoPull: autoPullEnabled,
+        nameHint: params.nameHint,
+        fetchRemoteUrl: params.fetchRemoteUrl,
+        fetchRef: params.fetchRef
+      }
     )
     if (!result.success || !result.path) {
       return { success: false, error: result.error || 'Failed to create worktree from branch' }

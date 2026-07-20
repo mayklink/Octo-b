@@ -103,7 +103,6 @@ export function Header(): React.JSX.Element {
   const {
     leftSidebarCollapsed,
     rightSidebarCollapsed,
-    rightSidebarTab,
     workspaceMode,
     toggleLeftSidebar,
     toggleRightSidebar,
@@ -681,7 +680,7 @@ export function Header(): React.JSX.Element {
         </div>
       )}
       <div className="flex-1" />
-      {visualizationMode === 'advanced' && (selectedWorktree || selectedConnection) && (
+      {visualizationMode === 'advanced' && workspaceView !== 'pull-requests' && (selectedWorktree || selectedConnection) && (
         <nav
           className="mr-2 flex items-center gap-0.5 rounded-lg border bg-muted/35 p-0.5"
           aria-label="Workspace mode"
@@ -718,6 +717,22 @@ export function Header(): React.JSX.Element {
         className="flex items-center gap-2"
         style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
       >
+        <Button
+          variant={workspaceView === 'pull-requests' ? 'secondary' : 'ghost'}
+          size="sm"
+          className="h-7 gap-1.5 text-xs"
+          onClick={() => {
+            setWorkspaceView('pull-requests')
+            useFileViewerStore.getState().clearActiveViews()
+            useKanbanStore.setState({ isBoardViewActive: false, isPinnedBoardActive: false })
+            setRightSidebarCollapsed(true)
+          }}
+          title="Pull request inbox"
+          data-testid="pull-request-inbox-toggle"
+        >
+          <GitPullRequest className="h-3.5 w-3.5" />
+          <span className="hidden xl:inline">Pull requests</span>
+        </Button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button

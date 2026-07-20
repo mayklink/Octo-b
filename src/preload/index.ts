@@ -6,6 +6,10 @@ import type {
   PetStatusPayload
 } from '../shared/types/pet'
 import type { McpServerConfig } from '../shared/types/mcp'
+import type {
+  PullRequestInboxRequest,
+  PullRequestInboxResponse
+} from '../shared/types/pull-request-inbox'
 
 // Force 100% zoom — Ghostty's native NSView overlay requires 1:1 CSS-to-AppKit
 // point mapping. Any zoom level breaks coordinate sync and causes misaligned
@@ -408,7 +412,8 @@ const worktreeOps = {
     projectName: string,
     branchName: string,
     prNumber?: number,
-    nameHint?: string
+    nameHint?: string,
+    reviewSource?: { remoteUrl: string; ref: string }
   ): Promise<{
     success: boolean
     worktree?: {
@@ -429,7 +434,9 @@ const worktreeOps = {
       projectName,
       branchName,
       prNumber,
-      nameHint
+      nameHint,
+      fetchRemoteUrl: reviewSource?.remoteUrl,
+      fetchRef: reviewSource?.ref
     }),
 
   // Subscribe to branch-renamed events (auto-rename from main process)
@@ -808,6 +815,10 @@ const fileTreeOps = {
 
 // Git file operations API
 const gitOps = {
+  listPullRequestInbox: (
+    request: PullRequestInboxRequest
+  ): Promise<PullRequestInboxResponse> => ipcRenderer.invoke('git:listPullRequestInbox', request),
+
   // Get file statuses for a worktree
   getFileStatuses: (
     worktreePath: string
