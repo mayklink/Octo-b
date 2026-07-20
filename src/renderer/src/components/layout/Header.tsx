@@ -705,6 +705,7 @@ export function Header(): React.JSX.Element {
                       : 'text-muted-foreground hover:text-foreground'
                 )}
                 aria-current={activeWorkspaceMode === mode ? 'page' : undefined}
+                data-testid={`workspace-mode-${mode}`}
               >
                 <Icon className="h-3.5 w-3.5" />
                 <span className="hidden xl:inline">{label}</span>

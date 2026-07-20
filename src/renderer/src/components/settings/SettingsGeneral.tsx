@@ -1,7 +1,7 @@
 import { useThemeStore } from '@/stores/useThemeStore'
 import { DEFAULT_THEME_ID } from '@/lib/themes'
 import { useSettingsStore, type UiLocale } from '@/stores/useSettingsStore'
-import { RotateCcw } from 'lucide-react'
+import { RotateCcw, Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { useShortcutStore } from '@/stores/useShortcutStore'
@@ -10,6 +10,10 @@ import type { UsageProvider } from '@shared/types/usage'
 import claudeIcon from '@/assets/model-icons/claude.svg'
 import openaiIcon from '@/assets/model-icons/openai.svg'
 import { isAgentSdkAvailable } from '@/lib/agent-sdk-availability'
+import {
+  ONBOARDING_TOUR_SETTING_KEY,
+  RESTART_ONBOARDING_TOUR_EVENT
+} from '@/components/onboarding'
 import { useTranslation } from 'react-i18next'
 
 export function SettingsGeneral(): React.JSX.Element {
@@ -486,7 +490,7 @@ export function SettingsGeneral(): React.JSX.Element {
       </div>
 
       {/* Default Agent SDK */}
-      <div className="space-y-2">
+      <div className="space-y-2" data-testid="agent-sdk-selector">
         <label className="text-sm font-medium">{t('settings.general.aiProvider')}</label>
         <p className="text-xs text-muted-foreground">{t('settings.general.aiProviderHint')}</p>
         <div className="flex gap-2">
@@ -657,6 +661,19 @@ export function SettingsGeneral(): React.JSX.Element {
 
       {/* Reset to defaults */}
       <div className="pt-4 border-t">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={async () => {
+            await window.db.setting.delete(ONBOARDING_TOUR_SETTING_KEY)
+            window.dispatchEvent(new Event(RESTART_ONBOARDING_TOUR_EVENT))
+          }}
+          className="mr-2"
+          data-testid="restart-onboarding-tour"
+        >
+          <Sparkles className="h-3.5 w-3.5 mr-1.5" />
+          {t('app.tour.restart')}
+        </Button>
         <Button
           variant="outline"
           size="sm"

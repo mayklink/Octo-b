@@ -993,7 +993,11 @@ export function ProjectDashboard(): React.JSX.Element {
               </div>
             </div>
           </div>
-          <Button onClick={handleAddProject} disabled={isAddingProject}>
+          <Button
+            onClick={handleAddProject}
+            disabled={isAddingProject}
+            data-testid="dashboard-add-project"
+          >
             {isAddingProject ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
