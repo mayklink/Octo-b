@@ -405,6 +405,8 @@ export function Header(): React.JSX.Element {
   }, [isConnectionMode, workspaceMode, setWorkspaceMode])
 
   const selectWorkspaceMode = (mode: 'chat' | 'code' | 'git' | 'board'): void => {
+    setWorkspaceView(selectedConnectionId ? 'connection' : selectedProjectId ? 'project' : 'projects')
+    setWorkspaceContentView(mode === 'chat' ? 'session' : 'overview')
     setWorkspaceMode(mode)
     if (mode === 'board') {
       useFileViewerStore.getState().clearActiveViews()
@@ -680,7 +682,7 @@ export function Header(): React.JSX.Element {
         </div>
       )}
       <div className="flex-1" />
-      {visualizationMode === 'advanced' && workspaceView !== 'pull-requests' && (selectedWorktree || selectedConnection) && (
+      {visualizationMode === 'advanced' && (selectedWorktree || selectedConnection) && (
         <nav
           className="mr-2 flex items-center gap-0.5 rounded-lg border bg-muted/35 p-0.5"
           aria-label="Workspace mode"
@@ -722,6 +724,10 @@ export function Header(): React.JSX.Element {
           size="sm"
           className="h-7 gap-1.5 text-xs"
           onClick={() => {
+            if (workspaceView === 'pull-requests') {
+              selectWorkspaceMode(workspaceMode)
+              return
+            }
             setWorkspaceView('pull-requests')
             useFileViewerStore.getState().clearActiveViews()
             useKanbanStore.setState({ isBoardViewActive: false, isPinnedBoardActive: false })
