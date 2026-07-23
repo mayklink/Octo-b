@@ -83,9 +83,12 @@ import { openCodeService } from './services/opencode-service'
 import { setKeepAwake, cleanupPowerSaveBlocker } from './services/power-save-blocker'
 import { configurePetWindow, destroyPetWindow, getPetWindow } from './services/pet-window'
 import { registerUpdateService } from './services/update-service'
+import { AutomaticPRReviewService } from './services/automatic-pr-review-service'
+import type { AutomaticPullRequestReviewSettings } from '@shared/types/pull-request-inbox'
 
 const log = createLogger({ component: 'Main' })
 let activeCodexImplementer: CodexImplementer | null = null
+let automaticPRReviewService: AutomaticPRReviewService | null = null
 
 // Global error handlers — prevent uncaught errors from crashing the Electron process
 process.on('uncaughtException', (error) => {
@@ -198,6 +201,7 @@ function createWindow(): void {
       sandbox: true
     }
   })
+  automaticPRReviewService?.setMainWindow(mainWindow)
 
   ensureDockVisible('create-main-window')
 
@@ -696,6 +700,21 @@ app.whenReady().then(async () => {
     sdkManager.setMainWindow(mainWindow)
 
     const databaseService = getDatabase()
+    automaticPRReviewService = new AutomaticPRReviewService(databaseService, sdkManager)
+    automaticPRReviewService.setMainWindow(mainWindow)
+    ipcMain.handle('automaticPRReview:getSnapshot', () =>
+      automaticPRReviewService?.getSnapshot()
+    )
+    ipcMain.handle(
+      'automaticPRReview:updateSettings',
+      (_event, settings: AutomaticPullRequestReviewSettings) =>
+        automaticPRReviewService?.updateSettings(settings)
+    )
+    ipcMain.handle('automaticPRReview:pollNow', async () => {
+      await automaticPRReviewService?.pollNow()
+      return automaticPRReviewService?.getSnapshot()
+    })
+    automaticPRReviewService.start()
 
     log.info('Registering OpenCode handlers')
     registerOpenCodeHandlers(mainWindow, sdkManager, databaseService)
@@ -827,6 +846,7 @@ app.on('will-quit', async () => {
   bashService.killAll()
   // Release any held power save blocker so the display can sleep again
   cleanupPowerSaveBlocker()
+  automaticPRReviewService?.stop()
   // Cleanup file tree watchers
   await cleanupFileTreeWatchers()
   // Cleanup worktree watchers (git status monitoring)

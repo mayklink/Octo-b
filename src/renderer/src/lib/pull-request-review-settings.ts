@@ -6,6 +6,7 @@ export interface PullRequestReviewRepositorySettings {
   agentSdk: PullRequestReviewAgentSdk
   model: SelectedModel | null
   promptPresetId: string
+  automaticReviewEnabled?: boolean
 }
 
 const DB_KEY = 'pull_request_review_settings'

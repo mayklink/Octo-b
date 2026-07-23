@@ -11,6 +11,7 @@ import {
   UserRound
 } from 'lucide-react'
 import type {
+  AutomaticPullRequestReviewSnapshot,
   PullRequestBucket,
   PullRequestInboxItem,
   PullRequestInboxRepository
@@ -52,7 +53,8 @@ function defaultRepositorySettings(): PullRequestReviewRepositorySettings {
   return {
     agentSdk,
     model: resolveModelForSdk(agentSdk, settings),
-    promptPresetId: settings.reviewPromptPresetId || DEFAULT_REVIEW_PROMPT_PRESET_ID
+    promptPresetId: settings.reviewPromptPresetId || DEFAULT_REVIEW_PROMPT_PRESET_ID,
+    automaticReviewEnabled: false
   }
 }
 
@@ -78,6 +80,8 @@ export function PullRequestInbox(): React.JSX.Element {
   const [repositoryFilter, setRepositoryFilter] = useState('all')
   const [reviewSettings, setReviewSettings] = useState<Record<string, PullRequestReviewRepositorySettings>>({})
   const [configuringRepository, setConfiguringRepository] = useState<PullRequestInboxRepository | null>(null)
+  const [automaticSnapshot, setAutomaticSnapshot] = useState<AutomaticPullRequestReviewSnapshot | null>(null)
+  const [automaticSaving, setAutomaticSaving] = useState(false)
 
   const refresh = useCallback(async (): Promise<void> => {
     setLoading(true)
@@ -107,6 +111,14 @@ export function PullRequestInbox(): React.JSX.Element {
     void loadPullRequestReviewSettings().then(setReviewSettings)
   }, [refresh])
 
+  useEffect(() => {
+    const load = (): void => {
+      void window.automaticPRReview.getSnapshot().then(setAutomaticSnapshot)
+    }
+    load()
+    return window.automaticPRReview.onEvent(() => load())
+  }, [])
+
   const visibleItems = useMemo(
     () => items.filter((item) =>
       (filter === 'all' || item.buckets.includes(filter)) &&
@@ -127,6 +139,7 @@ export function PullRequestInbox(): React.JSX.Element {
     const next = { ...reviewSettings, [repositoryId]: value }
     setReviewSettings(next)
     await savePullRequestReviewSettings(next)
+    await window.automaticPRReview.pollNow().then(setAutomaticSnapshot)
     toast.success('Review configuration saved')
   }
 
@@ -236,6 +249,93 @@ export function PullRequestInbox(): React.JSX.Element {
 
       <div className="min-h-0 flex-1 overflow-auto px-6 py-5">
         <div className="mx-auto max-w-6xl space-y-4">
+          {automaticSnapshot && (
+            <div className="flex flex-wrap items-center gap-3 rounded-xl border bg-card p-3 text-xs">
+              <label className="flex items-center gap-2 font-medium">
+                <input
+                  type="checkbox"
+                  checked={automaticSnapshot.settings.enabled}
+                  disabled={automaticSaving}
+                  onChange={async (event) => {
+                    setAutomaticSaving(true)
+                    try {
+                      const settings = await window.automaticPRReview.updateSettings({
+                        ...automaticSnapshot.settings,
+                        enabled: event.target.checked
+                      })
+                      setAutomaticSnapshot({ ...automaticSnapshot, settings })
+                    } finally {
+                      setAutomaticSaving(false)
+                    }
+                  }}
+                />
+                Automatic PR review
+              </label>
+              <label className="flex items-center gap-1.5 text-muted-foreground">
+                Every
+                <input
+                  type="number"
+                  min={1}
+                  max={1440}
+                  value={automaticSnapshot.settings.pollIntervalMinutes}
+                  className="h-7 w-16 rounded border bg-background px-2 text-foreground"
+                  onChange={(event) => setAutomaticSnapshot({
+                    ...automaticSnapshot,
+                    settings: {
+                      ...automaticSnapshot.settings,
+                      pollIntervalMinutes: Number(event.target.value) || 1
+                    }
+                  })}
+                  onBlur={async () => {
+                    const settings = await window.automaticPRReview.updateSettings(automaticSnapshot.settings)
+                    setAutomaticSnapshot({ ...automaticSnapshot, settings })
+                  }}
+                />
+                min
+              </label>
+              <label className="flex items-center gap-1.5 text-muted-foreground">
+                Concurrency
+                <input
+                  type="number"
+                  min={1}
+                  max={10}
+                  value={automaticSnapshot.settings.maxConcurrentReviews}
+                  className="h-7 w-14 rounded border bg-background px-2 text-foreground"
+                  onChange={(event) => setAutomaticSnapshot({
+                    ...automaticSnapshot,
+                    settings: {
+                      ...automaticSnapshot.settings,
+                      maxConcurrentReviews: Number(event.target.value) || 1
+                    }
+                  })}
+                  onBlur={async () => {
+                    const settings = await window.automaticPRReview.updateSettings(automaticSnapshot.settings)
+                    setAutomaticSnapshot({ ...automaticSnapshot, settings })
+                  }}
+                />
+              </label>
+              <span className="text-muted-foreground">
+                {automaticSnapshot.activeCount} running · {automaticSnapshot.queuedCount} queued
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                className="ml-auto h-7"
+                disabled={automaticSaving}
+                onClick={async () => {
+                  setAutomaticSaving(true)
+                  try {
+                    setAutomaticSnapshot(await window.automaticPRReview.pollNow())
+                  } finally {
+                    setAutomaticSaving(false)
+                  }
+                }}
+              >
+                {automaticSaving && <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />}
+                Check now
+              </Button>
+            </div>
+          )}
           <div className="flex flex-wrap items-center gap-2">
             {([
               ['all', 'All', items.length],
@@ -292,6 +392,11 @@ export function PullRequestInbox(): React.JSX.Element {
               {visibleItems.map((pullRequest) => {
                 const repository = repositoryById.get(pullRequest.repositoryId) ?? null
                 const config = reviewSettings[pullRequest.repositoryId]
+                const automaticRun = automaticSnapshot?.runs.find(
+                  (run) => run.repository_id === pullRequest.repositoryId &&
+                    run.pr_number === pullRequest.number &&
+                    run.head_sha === pullRequest.headSha
+                )
                 return (
                   <div key={pullRequest.id} className="border-b p-4 last:border-b-0 hover:bg-accent/25">
                     <div className="flex items-start gap-3">
@@ -303,6 +408,11 @@ export function PullRequestInbox(): React.JSX.Element {
                           {pullRequest.isDraft && <span className="rounded bg-muted px-1.5 py-0.5">Draft</span>}
                           {pullRequest.buckets.includes('authored') && <span className="rounded bg-blue-500/10 px-1.5 py-0.5 text-blue-500">Mine</span>}
                           {pullRequest.buckets.includes('review-requested') && <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-amber-500">Review requested</span>}
+                          {config?.automaticReviewEnabled && <span className="rounded bg-violet-500/10 px-1.5 py-0.5 text-violet-500">Auto on</span>}
+                          {automaticRun?.status === 'reviewed' && <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 text-emerald-500">AI reviewed</span>}
+                          {(automaticRun?.status === 'queued' || automaticRun?.status === 'preparing') && <span className="rounded bg-blue-500/10 px-1.5 py-0.5 text-blue-500">Queued</span>}
+                          {automaticRun?.status === 'running' && <span className="rounded bg-blue-500/10 px-1.5 py-0.5 text-blue-500">Reviewing</span>}
+                          {(automaticRun?.status === 'failed' || automaticRun?.status === 'blocked') && <span className="rounded bg-red-500/10 px-1.5 py-0.5 text-red-500">Needs attention</span>}
                           <span>{formatUpdatedAt(pullRequest.updatedAt)}</span>
                         </div>
                         <button

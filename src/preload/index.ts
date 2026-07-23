@@ -7,6 +7,9 @@ import type {
 } from '../shared/types/pet'
 import type { McpServerConfig } from '../shared/types/mcp'
 import type {
+  AutomaticPullRequestReviewEvent,
+  AutomaticPullRequestReviewSettings,
+  AutomaticPullRequestReviewSnapshot,
   PullRequestInboxRequest,
   PullRequestInboxResponse
 } from '../shared/types/pull-request-inbox'
@@ -1332,6 +1335,24 @@ const gitOps = {
   }> => ipcRenderer.invoke('git:generatePRContent', worktreePath, baseBranch, provider)
 }
 
+const automaticPRReview = {
+  getSnapshot: (): Promise<AutomaticPullRequestReviewSnapshot> =>
+    ipcRenderer.invoke('automaticPRReview:getSnapshot'),
+  updateSettings: (
+    settings: AutomaticPullRequestReviewSettings
+  ): Promise<AutomaticPullRequestReviewSettings> =>
+    ipcRenderer.invoke('automaticPRReview:updateSettings', settings),
+  pollNow: (): Promise<AutomaticPullRequestReviewSnapshot> =>
+    ipcRenderer.invoke('automaticPRReview:pollNow'),
+  onEvent: (callback: (event: AutomaticPullRequestReviewEvent) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, payload: AutomaticPullRequestReviewEvent): void => {
+      callback(payload)
+    }
+    ipcRenderer.on('automaticPRReview:event', handler)
+    return () => ipcRenderer.removeListener('automaticPRReview:event', handler)
+  }
+}
+
 const opencodeOps = {
   // Connect to OpenCode for a worktree (lazy starts server if needed)
   connect: (
@@ -2273,6 +2294,7 @@ if (process.contextIsolated) {
     contextBridge.exposeInMainWorld('opencodeOps', opencodeOps)
     contextBridge.exposeInMainWorld('fileTreeOps', fileTreeOps)
     contextBridge.exposeInMainWorld('gitOps', gitOps)
+    contextBridge.exposeInMainWorld('automaticPRReview', automaticPRReview)
     contextBridge.exposeInMainWorld('settingsOps', settingsOps)
     contextBridge.exposeInMainWorld('fileOps', fileOps)
     contextBridge.exposeInMainWorld('attachmentOps', attachmentOps)
@@ -2309,6 +2331,8 @@ if (process.contextIsolated) {
   window.fileTreeOps = fileTreeOps
   // @ts-expect-error (define in dts)
   window.gitOps = gitOps
+  // @ts-expect-error (define in dts)
+  window.automaticPRReview = automaticPRReview
   // @ts-expect-error (define in dts)
   window.settingsOps = settingsOps
   // @ts-expect-error (define in dts)

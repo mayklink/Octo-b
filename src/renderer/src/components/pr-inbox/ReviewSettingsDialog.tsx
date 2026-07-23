@@ -10,6 +10,7 @@ import {
   DialogTitle
 } from '@/components/ui/dialog'
 import { ModelSelector } from '@/components/sessions/ModelSelector'
+import { Switch } from '@/components/ui/switch'
 import {
   REVIEW_PROMPT_LABELS,
   reviewPromptPresetIdForBuiltin,
@@ -62,6 +63,20 @@ export function ReviewSettingsDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-1">
+          <div className="flex items-center justify-between gap-4 rounded-md border p-3">
+            <div>
+              <div className="text-sm font-medium">Automatic review</div>
+              <div className="text-xs text-muted-foreground">
+                Watch this repository and review new requested revisions automatically.
+              </div>
+            </div>
+            <Switch
+              checked={draft.automaticReviewEnabled === true}
+              onCheckedChange={(checked) =>
+                setDraft({ ...draft, automaticReviewEnabled: checked })
+              }
+            />
+          </div>
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-muted-foreground">Agent</label>
             <select

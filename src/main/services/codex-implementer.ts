@@ -16,6 +16,7 @@ import { mapCodexEventToStreamEvents, contentStreamKindFromMethod } from './code
 import { asNumber, asObject, asString, toJsonSnapshot } from './codex-utils'
 import { logCodexLifecycleEvent } from './codex-debug-logger'
 import { generateCodexSessionTitle } from './codex-session-title'
+import { emitAgentStreamEvent, type AgentStreamEvent } from './agent-event-bus'
 import { getConfiguredCodexMcpServers } from './mcp-settings'
 import type { DatabaseService } from '../db/database'
 import type { SessionMessageCreate } from '../db/types'
@@ -1731,6 +1732,10 @@ export class CodexImplementer implements AgentSdkImplementer {
   }
 
   private sendToRenderer(channel: string, data: unknown): void {
+    if (channel === 'opencode:stream' && data && typeof data === 'object') {
+      const event = data as Partial<AgentStreamEvent>
+      if (event.type && event.sessionId) emitAgentStreamEvent(event as AgentStreamEvent)
+    }
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
       this.mainWindow.webContents.send(channel, data)
     } else {

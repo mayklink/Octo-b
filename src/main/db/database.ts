@@ -46,7 +46,10 @@ import type {
   TicketDependency,
   DiffComment,
   DiffCommentCreate,
-  DiffCommentUpdate
+  DiffCommentUpdate,
+  AutomaticPullRequestReviewRunRow,
+  AutomaticPullRequestReviewRunCreate,
+  AutomaticPullRequestReviewRunUpdate
 } from './types'
 
 export class DatabaseService {
@@ -481,6 +484,31 @@ export class DatabaseService {
         ON ticket_followup_messages(ticket_id, created_at);
     `)
     this.safeAddColumn('ticket_followup_messages', 'role', "TEXT NOT NULL DEFAULT 'user'")
+
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS automatic_pr_review_runs (
+        id TEXT PRIMARY KEY,
+        provider TEXT NOT NULL,
+        repository_id TEXT NOT NULL,
+        pr_number INTEGER NOT NULL,
+        head_sha TEXT NOT NULL,
+        title TEXT NOT NULL,
+        payload_json TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'queued',
+        worktree_id TEXT REFERENCES worktrees(id) ON DELETE SET NULL,
+        session_id TEXT REFERENCES sessions(id) ON DELETE SET NULL,
+        attempt_count INTEGER NOT NULL DEFAULT 0,
+        error TEXT,
+        discovered_at TEXT NOT NULL,
+        started_at TEXT,
+        completed_at TEXT,
+        updated_at TEXT NOT NULL
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_auto_pr_review_revision
+        ON automatic_pr_review_runs(provider, repository_id, pr_number, head_sha);
+      CREATE INDEX IF NOT EXISTS idx_auto_pr_review_status
+        ON automatic_pr_review_runs(status, discovered_at);
+    `)
   }
 
   // Settings operations
@@ -505,6 +533,73 @@ export class DatabaseService {
   getAllSettings(): Setting[] {
     const db = this.getDb()
     return db.prepare('SELECT key, value FROM settings').all() as Setting[]
+  }
+
+  createAutomaticPullRequestReviewRun(data: AutomaticPullRequestReviewRunCreate): boolean {
+    const db = this.getDb()
+    const now = new Date().toISOString()
+    const result = db.prepare(
+      `INSERT OR IGNORE INTO automatic_pr_review_runs
+       (id, provider, repository_id, pr_number, head_sha, title, payload_json, status,
+        discovered_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'queued', ?, ?)`
+    ).run(
+      data.id,
+      data.provider,
+      data.repository_id,
+      data.pr_number,
+      data.head_sha,
+      data.title,
+      data.payload_json,
+      now,
+      now
+    )
+    return result.changes > 0
+  }
+
+  getAutomaticPullRequestReviewRun(id: string): AutomaticPullRequestReviewRunRow | null {
+    const row = this.getDb()
+      .prepare('SELECT * FROM automatic_pr_review_runs WHERE id = ?')
+      .get(id) as AutomaticPullRequestReviewRunRow | undefined
+    return row ?? null
+  }
+
+  listAutomaticPullRequestReviewRuns(limit = 100): AutomaticPullRequestReviewRunRow[] {
+    return this.getDb()
+      .prepare(
+        `SELECT * FROM automatic_pr_review_runs
+         ORDER BY discovered_at DESC
+         LIMIT ?`
+      )
+      .all(Math.max(1, Math.min(500, limit))) as AutomaticPullRequestReviewRunRow[]
+  }
+
+  listPendingAutomaticPullRequestReviewRuns(): AutomaticPullRequestReviewRunRow[] {
+    return this.getDb()
+      .prepare(
+        `SELECT * FROM automatic_pr_review_runs
+         WHERE status IN ('queued', 'preparing', 'running')
+         ORDER BY discovered_at ASC`
+      )
+      .all() as AutomaticPullRequestReviewRunRow[]
+  }
+
+  updateAutomaticPullRequestReviewRun(
+    id: string,
+    data: AutomaticPullRequestReviewRunUpdate
+  ): AutomaticPullRequestReviewRunRow | null {
+    const allowed: Array<keyof AutomaticPullRequestReviewRunUpdate> = [
+      'status', 'worktree_id', 'session_id', 'attempt_count', 'error', 'started_at', 'completed_at'
+    ]
+    const entries = allowed
+      .filter((key) => Object.prototype.hasOwnProperty.call(data, key))
+      .map((key) => [key, data[key]] as const)
+    if (entries.length === 0) return this.getAutomaticPullRequestReviewRun(id)
+    const assignments = entries.map(([key]) => `${key} = ?`).join(', ')
+    this.getDb()
+      .prepare(`UPDATE automatic_pr_review_runs SET ${assignments}, updated_at = ? WHERE id = ?`)
+      .run(...entries.map(([, value]) => value), new Date().toISOString(), id)
+    return this.getAutomaticPullRequestReviewRun(id)
   }
 
   // Project operations

@@ -182,6 +182,18 @@ export function useOpenCodeGlobalListener(): void {
     return unsubscribe
   }, [])
 
+  // Sessions created by the background PR reviewer bypass the renderer's
+  // createSession action. Merge them into the stores so tabs and live status
+  // appear immediately without changing the user's current workspace.
+  useEffect(() => {
+    if (!window.automaticPRReview?.onEvent) return () => {}
+    return window.automaticPRReview.onEvent((event) => {
+      if (event.type !== 'session-created') return
+      void useWorktreeStore.getState().loadWorktrees(event.projectId)
+      void useSessionStore.getState().loadSessions(event.worktreeId, event.projectId)
+    })
+  }, [])
+
   useEffect(() => {
     const unsubscribe = window.opencodeOps?.onStream
       ? window.opencodeOps.onStream((event) => {

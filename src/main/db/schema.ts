@@ -1,4 +1,4 @@
-export const CURRENT_SCHEMA_VERSION = 25
+export const CURRENT_SCHEMA_VERSION = 26
 
 export const SCHEMA_SQL = `
 -- Projects table
@@ -478,5 +478,32 @@ CREATE INDEX IF NOT EXISTS idx_diff_comments_worktree_file ON diff_comments(work
     down: `DROP INDEX IF EXISTS idx_diff_comments_worktree_file;
 DROP INDEX IF EXISTS idx_diff_comments_worktree;
 DROP TABLE IF EXISTS diff_comments;`
+  },
+  {
+    version: 26,
+    name: 'add_automatic_pr_review_runs',
+    up: `CREATE TABLE IF NOT EXISTS automatic_pr_review_runs (
+  id TEXT PRIMARY KEY,
+  provider TEXT NOT NULL,
+  repository_id TEXT NOT NULL,
+  pr_number INTEGER NOT NULL,
+  head_sha TEXT NOT NULL,
+  title TEXT NOT NULL,
+  payload_json TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'queued',
+  worktree_id TEXT REFERENCES worktrees(id) ON DELETE SET NULL,
+  session_id TEXT REFERENCES sessions(id) ON DELETE SET NULL,
+  attempt_count INTEGER NOT NULL DEFAULT 0,
+  error TEXT,
+  discovered_at TEXT NOT NULL,
+  started_at TEXT,
+  completed_at TEXT,
+  updated_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_auto_pr_review_revision
+  ON automatic_pr_review_runs(provider, repository_id, pr_number, head_sha);
+CREATE INDEX IF NOT EXISTS idx_auto_pr_review_status
+  ON automatic_pr_review_runs(status, discovered_at);`,
+    down: `DROP TABLE IF EXISTS automatic_pr_review_runs;`
   }
 ]

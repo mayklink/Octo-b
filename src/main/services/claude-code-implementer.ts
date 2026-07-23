@@ -17,6 +17,7 @@ import { autoRenameWorktreeBranch } from './git-service'
 import { Options, PermissionMode, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 import { CommandFilterService, type CommandFilterSettings } from './command-filter-service'
 import { APP_SETTINGS_DB_KEY } from '@shared/types/settings'
+import { emitAgentStreamEvent, type AgentStreamEvent } from './agent-event-bus'
 
 const log = createLogger({ component: 'ClaudeCodeImplementer' })
 
@@ -3111,6 +3112,10 @@ export class ClaudeCodeImplementer implements AgentSdkImplementer {
   }
 
   protected sendToRenderer(channel: string, data: unknown): void {
+    if (channel === 'opencode:stream' && data && typeof data === 'object') {
+      const event = data as Partial<AgentStreamEvent>
+      if (event.type && event.sessionId) emitAgentStreamEvent(event as AgentStreamEvent)
+    }
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
       this.mainWindow.webContents.send(channel, data)
     } else {

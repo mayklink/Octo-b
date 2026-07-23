@@ -5,6 +5,9 @@ import type {
   PetStatusPayload
 } from '../shared/types/pet'
 import type {
+  AutomaticPullRequestReviewEvent,
+  AutomaticPullRequestReviewSettings,
+  AutomaticPullRequestReviewSnapshot,
   PullRequestInboxRequest,
   PullRequestInboxResponse
 } from '../shared/types/pull-request-inbox'
@@ -334,6 +337,14 @@ declare global {
 
 
   interface Window {
+    automaticPRReview: {
+      getSnapshot: () => Promise<AutomaticPullRequestReviewSnapshot>
+      updateSettings: (
+        settings: AutomaticPullRequestReviewSettings
+      ) => Promise<AutomaticPullRequestReviewSettings>
+      pollNow: () => Promise<AutomaticPullRequestReviewSnapshot>
+      onEvent: (callback: (event: AutomaticPullRequestReviewEvent) => void) => () => void
+    }
     db: {
       setting: {
         get: (key: string) => Promise<string | null>

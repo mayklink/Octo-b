@@ -152,7 +152,7 @@ async function loadGitHub(
           user: { login: string; avatar_url?: string }
           requested_reviewers?: Array<{ login: string }>
           assignees?: Array<{ login: string }>
-          head: { ref: string }
+          head: { ref: string; sha: string }
           base: { ref: string }
           draft?: boolean
           updated_at: string
@@ -165,6 +165,9 @@ async function loadGitHub(
             (person) => person.login.toLowerCase() === viewer.login.toLowerCase()
           )
           if (marked) buckets.push('review-requested')
+          const reviewRequested = (pull.requested_reviewers ?? []).some(
+            (person) => person.login.toLowerCase() === viewer.login.toLowerCase()
+          )
           if (buckets.length === 0) continue
           items.push({
             id: `${repositoryId}:${pull.number}`,
@@ -178,10 +181,12 @@ async function loadGitHub(
             repositoryName,
             bucket: buckets[0],
             buckets,
+            reviewRequested,
             headRefName: pull.head.ref,
             baseRefName: pull.base.ref,
             isDraft: pull.draft === true,
             updatedAt: pull.updated_at,
+            headSha: pull.head.sha,
             projectId: repo.project.id,
             projectPath: repo.project.path
           })
@@ -224,6 +229,7 @@ interface AzurePullRequest {
   targetRefName: string
   isDraft?: boolean
   creationDate: string
+  lastMergeSourceCommit?: { commitId?: string }
 }
 
 async function loadAzureProject(
@@ -267,6 +273,9 @@ async function loadAzureProject(
     ) {
       buckets.push('review-requested')
     }
+    const reviewRequested = (pull.reviewers ?? []).some(
+      (reviewer) => reviewer.id.toLowerCase() === viewerId.toLowerCase()
+    )
     if (buckets.length === 0) continue
     items.push({
       id: `${repositoryId}:${pull.pullRequestId}`,
@@ -280,6 +289,7 @@ async function loadAzureProject(
       repositoryName: fullName,
       bucket: buckets[0],
       buckets,
+      reviewRequested,
       headRefName: pull.sourceRefName.replace(/^refs\/heads\//, ''),
       sourceRepositoryUrl:
         pull.sourceRepository?.remoteUrl ??
@@ -289,6 +299,7 @@ async function loadAzureProject(
       baseRefName: pull.targetRefName.replace(/^refs\/heads\//, ''),
       isDraft: pull.isDraft === true,
       updatedAt: pull.creationDate,
+      headSha: pull.lastMergeSourceCommit?.commitId ?? `${pull.pullRequestId}:${pull.creationDate}`,
       projectId: local?.project.id,
       projectPath: local?.project.path
     })

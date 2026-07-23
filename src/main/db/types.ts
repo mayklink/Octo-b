@@ -182,6 +182,54 @@ export interface SessionMessageUpsertByOpenCode {
   created_at?: string
 }
 
+export type AutomaticPullRequestReviewRunStatus =
+  | 'queued'
+  | 'preparing'
+  | 'running'
+  | 'reviewed'
+  | 'blocked'
+  | 'failed'
+  | 'cancelled'
+
+export interface AutomaticPullRequestReviewRunRow {
+  id: string
+  provider: 'github' | 'azure-devops'
+  repository_id: string
+  pr_number: number
+  head_sha: string
+  title: string
+  payload_json: string
+  status: AutomaticPullRequestReviewRunStatus
+  worktree_id: string | null
+  session_id: string | null
+  attempt_count: number
+  error: string | null
+  discovered_at: string
+  started_at: string | null
+  completed_at: string | null
+  updated_at: string
+}
+
+export interface AutomaticPullRequestReviewRunCreate {
+  id: string
+  provider: 'github' | 'azure-devops'
+  repository_id: string
+  pr_number: number
+  head_sha: string
+  title: string
+  payload_json: string
+}
+
+export interface AutomaticPullRequestReviewRunUpdate {
+  status?: AutomaticPullRequestReviewRunStatus
+  worktree_id?: string | null
+  session_id?: string | null
+  attempt_count?: number
+  error?: string | null
+  started_at?: string | null
+  completed_at?: string | null
+}
+
 export type SessionActivityKind =
   | 'tool.started'
   | 'tool.updated'
