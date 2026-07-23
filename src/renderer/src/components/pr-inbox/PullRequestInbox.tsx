@@ -166,6 +166,15 @@ export function PullRequestInbox(): React.JSX.Element {
       }
       if (!worktree) throw new Error('Created worktree was not found')
 
+      const syncResult = await window.gitOps.syncPullRequestBranch(worktree.path, {
+        prNumber: pullRequest.provider === 'github' ? pullRequest.number : undefined,
+        headRefName: pullRequest.headRefName,
+        sourceRepositoryUrl: pullRequest.sourceRepositoryUrl
+      })
+      if (!syncResult.success) {
+        throw new Error(syncResult.error || 'Could not update the pull request branch')
+      }
+
       useProjectStore.getState().selectProject(project.id)
       useWorktreeStore.getState().selectWorktree(worktree.id)
       useLayoutStore.getState().setWorkspaceView('project')

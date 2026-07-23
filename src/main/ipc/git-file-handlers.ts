@@ -468,6 +468,28 @@ export function registerGitFileHandlers(window: BrowserWindow): void {
     }
   )
 
+  // Refresh the checked-out PR head and its origin refs before opening a review session.
+  ipcMain.handle(
+    'git:syncPullRequestBranch',
+    async (
+      _event,
+      worktreePath: string,
+      options: { prNumber?: number; headRefName: string; sourceRepositoryUrl?: string }
+    ): Promise<GitPullResult> => {
+      try {
+        return await createGitService(worktreePath).syncPullRequestBranch(options)
+      } catch (error) {
+        const errMessage = error instanceof Error ? error.message : 'Unknown error'
+        log.error(
+          'Failed to synchronize pull request branch',
+          error instanceof Error ? error : new Error(errMessage),
+          { worktreePath, prNumber: options.prNumber }
+        )
+        return { success: false, error: errMessage }
+      }
+    }
+  )
+
   // Check out a branch (clean worktree only; no-op if already there)
   ipcMain.handle(
     'git:checkoutBranch',

@@ -995,6 +995,16 @@ const gitOps = {
     error?: string
   }> => ipcRenderer.invoke('git:pull', worktreePath, remote, branch, rebase),
 
+  // Refresh a PR worktree from its provider before opening a review session
+  syncPullRequestBranch: (
+    worktreePath: string,
+    options: { prNumber?: number; headRefName: string; sourceRepositoryUrl?: string }
+  ): Promise<{
+    success: boolean
+    updated?: boolean
+    error?: string
+  }> => ipcRenderer.invoke('git:syncPullRequestBranch', worktreePath, options),
+
   // Get diff for a file
   getDiff: (
     worktreePath: string,

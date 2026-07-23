@@ -1226,6 +1226,15 @@ declare global {
         updated?: boolean
         error?: string
       }>
+      // Refresh a PR worktree from its provider before opening a review session
+      syncPullRequestBranch: (
+        worktreePath: string,
+        options: { prNumber?: number; headRefName: string; sourceRepositoryUrl?: string }
+      ) => Promise<{
+        success: boolean
+        updated?: boolean
+        error?: string
+      }>
       // Get diff for a file
       getDiff: (
         worktreePath: string,

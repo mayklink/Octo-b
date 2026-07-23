@@ -1085,6 +1085,66 @@ export class GitService {
   }
 
   /**
+   * Refresh a PR worktree from the provider's authoritative head ref.
+   * The update is fast-forward only so opening a review can never create a
+   * merge commit or silently review a locally-diverged branch.
+   */
+  async syncPullRequestBranch(options: {
+    prNumber?: number
+    headRefName: string
+    sourceRepositoryUrl?: string
+  }): Promise<GitPullResult> {
+    try {
+      const beforeSha = await this.git.revparse(['HEAD'])
+
+      // Refresh remote-tracking refs as well, since the review compares the PR
+      // head against origin/<base branch>.
+      await this.git.fetch('origin')
+
+      if (options.prNumber != null) {
+        await this.git.raw(['fetch', 'origin', `pull/${options.prNumber}/head`])
+      } else if (options.sourceRepositoryUrl) {
+        await this.git.raw([
+          'fetch',
+          options.sourceRepositoryUrl,
+          `refs/heads/${options.headRefName}`
+        ])
+      } else {
+        await this.git.raw(['fetch', 'origin', options.headRefName])
+      }
+
+      await this.git.raw(['merge', '--ff-only', 'FETCH_HEAD'])
+      const afterSha = await this.git.revparse(['HEAD'])
+
+      log.info('Synchronized pull request worktree', {
+        prNumber: options.prNumber,
+        headRefName: options.headRefName,
+        updated: beforeSha !== afterSha,
+        repoPath: this.repoPath
+      })
+
+      return { success: true, updated: beforeSha !== afterSha }
+    } catch (error) {
+      const errMessage = error instanceof Error ? error.message : 'Unknown error'
+      log.error(
+        'Failed to synchronize pull request worktree',
+        error instanceof Error ? error : new Error(errMessage),
+        { prNumber: options.prNumber, headRefName: options.headRefName, repoPath: this.repoPath }
+      )
+
+      let userMessage = errMessage
+      if (/not possible to fast-forward|non-fast-forward|diverg/i.test(errMessage)) {
+        userMessage =
+          'The local PR branch has diverged from the remote branch. Resolve or recreate the worktree before reviewing.'
+      } else if (/local changes|would be overwritten|uncommitted/i.test(errMessage)) {
+        userMessage = 'Commit or stash local changes before updating this pull request.'
+      }
+
+      return { success: false, error: userMessage }
+    }
+  }
+
+  /**
    * Pull a base branch before creating a worktree
    * Uses git pull with --ff-only to update the local branch safely
    * Gracefully handles errors - won't block worktree creation
